@@ -6,20 +6,15 @@ use panic_semihosting as _;
 use static_cell::StaticCell;
 use taskette::{Scheduler, SchedulerConfig, Stack};
 
+static LOGGER: Logger = Logger;
+
 static TASK1_STACK: StaticCell<Stack<8192>> = StaticCell::new();
 static TASK2_STACK: StaticCell<Stack<8192>> = StaticCell::new();
 
 #[cortex_m_rt::entry]
 fn main() -> ! {
-    // Configure logger to use semihosting
-    goolog::init_logger(
-        Some(log::Level::Trace),
-        None,
-        &|_ts, target, level, args| {
-            cortex_m_semihosting::hprintln!("[{}] {}: {}", level, target, args);
-        },
-    )
-    .unwrap();
+    log::set_logger(&LOGGER).unwrap();
+    log::set_max_level(log::LevelFilter::Trace);
 
     info!("Started");
 
@@ -50,4 +45,20 @@ fn main() -> ! {
     }).unwrap();
 
     scheduler.start();
+}
+
+struct Logger;
+
+impl log::Log for Logger {
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
+        metadata.level() <= log::Level::Trace
+    }
+    
+    fn log(&self, record: &log::Record) {
+        if self.enabled(record.metadata()) {
+            cortex_m_semihosting::hprintln!("[{}] {}: {}", record.level(), record.target(), record.args())
+        }
+    }
+    
+    fn flush(&self) {}
 }
