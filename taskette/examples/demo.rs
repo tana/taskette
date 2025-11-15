@@ -4,7 +4,7 @@
 use log::info;
 use panic_semihosting as _;
 use static_cell::StaticCell;
-use taskette::{Kernel, KernelConfig, Stack};
+use taskette::{Scheduler, SchedulerConfig, Stack};
 
 static TASK1_STACK: StaticCell<Stack<8192>> = StaticCell::new();
 static TASK2_STACK: StaticCell<Stack<8192>> = StaticCell::new();
@@ -24,15 +24,15 @@ fn main() -> ! {
     info!("Started");
 
     let peripherals = cortex_m::Peripherals::take().unwrap();
-    let mut kernel = Kernel::new(
+    let mut scheduler = Scheduler::init(
         peripherals.SYST,
         peripherals.SCB,
         12_000_000,
-        KernelConfig::default().with_tick_freq(10),
-    );
+        SchedulerConfig::default().with_tick_freq(10),
+    ).unwrap();
 
     let task1_stack = TASK1_STACK.init(Stack::new());
-    let _task1 = kernel.spawn(task1_stack, || {
+    let _task1 = scheduler.spawn(task1_stack, || {
         let mut i = 0;
         loop {
             log::info!("task1 {}", i);
@@ -41,7 +41,7 @@ fn main() -> ! {
     }).unwrap();
 
     let task2_stack = TASK2_STACK.init(Stack::new());
-    let _task2 = kernel.spawn(task2_stack, || {
+    let _task2 = scheduler.spawn(task2_stack, || {
         let mut i = 0;
         loop {
             log::info!("task2 {}", i);
@@ -49,5 +49,5 @@ fn main() -> ! {
         }
     }).unwrap();
 
-    kernel.start();
+    scheduler.start();
 }

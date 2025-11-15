@@ -12,9 +12,12 @@ use log::{debug, info, trace};
 
 const MAX_NUM_TASKS: usize = 10;
 
-static STACK_POINTERS: Mutex<RefCell<Vec<usize, MAX_NUM_TASKS>>> =
-    Mutex::new(RefCell::new(Vec::new()));
-static CURRENT_TASK: Mutex<RefCell<usize>> = Mutex::new(RefCell::new(0));
+static SCHEDULER_STATE: Mutex<RefCell<Option<SchedulerState>>> = Mutex::new(RefCell::new(None));
+
+struct SchedulerState {
+    stack_pointers: Vec<usize, MAX_NUM_TASKS>,
+    current_task: usize,
+}
 
 #[derive(Clone, Debug)]
 pub enum Error {
@@ -22,48 +25,61 @@ pub enum Error {
 }
 
 #[non_exhaustive]
-pub struct KernelConfig {
+pub struct SchedulerConfig {
     pub tick_freq: u32,
 }
 
-impl KernelConfig {
+impl SchedulerConfig {
     pub fn with_tick_freq(self, tick_freq: u32) -> Self {
         Self { tick_freq, ..self }
     }
 }
 
-impl Default for KernelConfig {
+impl Default for SchedulerConfig {
     fn default() -> Self {
         Self { tick_freq: 1000 }
     }
 }
 
-pub struct Kernel {
+pub struct Scheduler {
     syst: cortex_m::peripheral::SYST,
     scb: cortex_m::peripheral::SCB,
     clock_freq: u32,
-    config: KernelConfig,
+    config: SchedulerConfig,
 }
 
-impl Kernel {
-    pub fn new(
+impl Scheduler {
+    pub fn init(
         syst: cortex_m::peripheral::SYST,
         scb: cortex_m::peripheral::SCB,
         clock_freq: u32,
-        config: KernelConfig,
-    ) -> Self {
-        // Reserve Task #0 for idle task
-        critical_section::with(|cs| {
-            let mut stack_pointers = STACK_POINTERS.borrow_ref_mut(cs);
-            stack_pointers.push(0).unwrap();
-        });
+        config: SchedulerConfig,
+    ) -> Option<Self> {
+        if !critical_section::with(|cs| {
+            let mut scheduler_state = SCHEDULER_STATE.borrow_ref_mut(cs);
+            if scheduler_state.is_some() {
+                // Scheduler is already initialized
+                false
+            } else {
+                *scheduler_state = Some(SchedulerState {
+                    // Reserve Task #0 for idle task
+                    stack_pointers: Vec::from_array([0]),
+                    current_task: 0,
+                });
 
-        Kernel {
+                true
+            }
+        }) {
+            // Init failed
+            return None
+        }
+
+        Some(Scheduler {
             syst,
             scb,
             clock_freq,
             config,
-        }
+        })
     }
 
     pub fn start(&mut self) -> ! {
@@ -119,10 +135,15 @@ impl Kernel {
         };
 
         let Ok(task_id) = critical_section::with(|cs| {
-            let mut stack_pointers = STACK_POINTERS.borrow_ref_mut(cs);
-            stack_pointers.push(initial_sp as usize)?;
+            let mut state = SCHEDULER_STATE.borrow_ref_mut(cs);
+            let Some(state) = state.as_mut()
+            else {
+                // The init of `SCHEDULER_STATE` is guaranteed by the existence of `Scheduler`
+                unreachable!()
+            };
 
-            Ok::<usize, usize>(stack_pointers.len() - 1)
+            state.stack_pointers.push(initial_sp as usize)?;
+            Ok::<usize, usize>(state.stack_pointers.len() - 1)
         }) else {
             return Err(Error::TaskFull)
         };
@@ -156,16 +177,16 @@ extern "C" fn PendSV() {
 }
 
 extern "C" fn switch_context(orig_sp: usize) -> usize {
-    critical_section::with(|cs| {
-        let current_task = CURRENT_TASK.borrow_ref(cs);
-        STACK_POINTERS.borrow_ref_mut(cs)[*current_task] = orig_sp;
-    });
     let next_sp = critical_section::with(|cs| {
-        let stack_pointers = STACK_POINTERS.borrow_ref(cs);
-        let mut current_task = CURRENT_TASK.borrow_ref_mut(cs);
-        *current_task = (*current_task + 1) % stack_pointers.len();
+        let mut state = SCHEDULER_STATE.borrow_ref_mut(cs);
+        let Some(state) = state.as_mut()
+        else {
+            panic!("Scheduler not initialized")
+        };
 
-        stack_pointers[*current_task]
+        state.stack_pointers[state.current_task] = orig_sp;
+        state.current_task = (state.current_task + 1) % state.stack_pointers.len();
+        state.stack_pointers[state.current_task]
     });
     trace!("Context switch: orig_sp = {:08X}, next_sp = {:08X}", orig_sp, next_sp);
     next_sp
