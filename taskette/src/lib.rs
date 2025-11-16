@@ -121,15 +121,21 @@ impl Scheduler {
         }
     }
 
-    pub fn spawn<const N: usize>(
+    pub fn spawn<F: FnOnce() + Send + 'static, const N: usize>(
         &self,
         stack: &mut Stack<N>,
-        func: fn(),
+        func: F,
     ) -> Result<TaskHandle, Error> {
         // Prepare initial stack of the task
         let initial_sp = unsafe {
             let sp = stack.0.as_mut_ptr_range().end;
-            let sp = push_to_stack(sp, HardwareSavedRegisters::from_pc(func as u32));
+            // Push the closure into the initial stack
+            let sp = push_to_stack(sp, Some(func));
+            // Call `call_closure` with a pointer to the closure as the first argument
+            let sp = push_to_stack(sp, HardwareSavedRegisters::from_pc_and_r0(
+                (call_closure as extern "C" fn(&mut Option<F>)) as u32,
+                sp as u32,
+            ));
             let sp = push_to_stack(sp, SoftwareSavedRegisters::new());
             sp
         };
@@ -200,7 +206,11 @@ fn SysTick() {
 
 unsafe fn push_to_stack<T>(sp: *mut u8, obj: T) -> *mut u8 {
     unsafe {
-        let sp = sp.byte_sub(size_of::<T>());
+        let size = size_of::<T>();
+        // Ensure 8-byte alignment
+        let size = if size % 8 == 0 { size } else { size + 8 - (size % 8) };
+
+        let sp = sp.byte_sub(size);
         *(sp as *mut T) = obj;
 
         sp
@@ -247,9 +257,9 @@ struct HardwareSavedRegisters {
 }
 
 impl HardwareSavedRegisters {
-    fn from_pc(pc: u32) -> Self {
+    fn from_pc_and_r0(pc: u32, r0: u32) -> Self {
         Self {
-            r0: 0,
+            r0,
             r1: 0,
             r2: 0,
             r3: 0,
@@ -287,5 +297,13 @@ impl SoftwareSavedRegisters {
             r10: 0,
             r11: 0,
         }
+    }
+}
+
+extern "C" fn call_closure<F: FnOnce()>(f: &mut Option<F>) {
+    if let Some(f) = f.take() {
+        f()
+    } else {
+        unreachable!()
     }
 }

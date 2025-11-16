@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 
+use heapless::String;
 use log::info;
 use panic_semihosting as _;
 use static_cell::StaticCell;
@@ -26,20 +27,22 @@ fn main() -> ! {
         SchedulerConfig::default().with_tick_freq(10),
     ).unwrap();
 
+    let task1_str = String::<8>::try_from("aaaa").unwrap();
     let task1_stack = TASK1_STACK.init(Stack::new());
-    let _task1 = scheduler.spawn(task1_stack, || {
+    let _task1 = scheduler.spawn(task1_stack, move || {
         let mut i = 0;
         loop {
-            log::info!("task1 {}", i);
+            log::info!("task1 {} {}", i, task1_str);
             i = (i + 1) % 10000;
         }
     }).unwrap();
 
+    let task2_str = String::<8>::try_from("bbbb").unwrap();
     let task2_stack = TASK2_STACK.init(Stack::new());
-    let _task2 = scheduler.spawn(task2_stack, || {
+    let _task2 = scheduler.spawn(task2_stack, move || {
         let mut i = 0;
         loop {
-            log::info!("task2 {}", i);
+            log::info!("task2 {} {}", i, task2_str);
             i = (i + 1) % 10000;
         }
     }).unwrap();
