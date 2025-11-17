@@ -123,8 +123,9 @@ impl Scheduler {
 
     pub fn spawn<F: FnOnce() + Send + 'static, const N: usize>(
         &self,
-        stack: &mut Stack<N>,
         func: F,
+        stack: &mut Stack<N>,
+        config: TaskConfig,
     ) -> Result<TaskHandle, Error> {
         // Prepare initial stack of the task
         let initial_sp = unsafe {
@@ -240,6 +241,26 @@ pub struct TaskHandle {
 impl TaskHandle {
     pub fn id(&self) -> usize {
         self.id
+    }
+}
+
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub struct TaskConfig {
+    priority: usize,
+}
+
+impl TaskConfig {
+    pub fn with_priority(self, priority: usize) -> Self {
+        Self { priority, ..self }
+    }
+}
+
+impl Default for TaskConfig {
+    fn default() -> Self {
+        Self {
+            priority: 1,
+        }
     }
 }
 
