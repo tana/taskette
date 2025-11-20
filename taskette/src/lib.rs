@@ -7,7 +7,7 @@ use cortex_m::{
     register::control::Spsel,
 };
 use critical_section::Mutex;
-use heapless::Vec;
+use heapless::Deque;
 use log::{debug, info, trace};
 
 const MAX_NUM_TASKS: usize = 10;
@@ -15,8 +15,14 @@ const MAX_NUM_TASKS: usize = 10;
 static SCHEDULER_STATE: Mutex<RefCell<Option<SchedulerState>>> = Mutex::new(RefCell::new(None));
 
 struct SchedulerState {
-    stack_pointers: Vec<usize, MAX_NUM_TASKS>,
+    tasks: [Option<TaskInfo>; MAX_NUM_TASKS],
+    task_queue: Deque<usize, MAX_NUM_TASKS>,
     current_task: usize,
+}
+
+/// Task Control Block (TCB)
+struct TaskInfo {
+    stack_pointer: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -61,9 +67,14 @@ impl Scheduler {
                 // Scheduler is already initialized
                 false
             } else {
+                let mut tasks = [const { None }; MAX_NUM_TASKS];
+                let mut task_queue = Deque::new();
+                task_queue.push_back(0).unwrap_or_else(|_| unreachable!());
+                // Reserve Task #0 for idle task
+                tasks[0] = Some(TaskInfo { stack_pointer: 0 });
                 *scheduler_state = Some(SchedulerState {
-                    // Reserve Task #0 for idle task
-                    stack_pointers: Vec::from_array([0]),
+                    tasks,
+                    task_queue,
                     current_task: 0,
                 });
 
@@ -71,7 +82,7 @@ impl Scheduler {
             }
         }) {
             // Init failed
-            return None
+            return None;
         }
 
         Some(Scheduler {
@@ -133,34 +144,51 @@ impl Scheduler {
             // Push the closure into the initial stack
             let sp = push_to_stack(sp, Some(func));
             // Call `call_closure` with a pointer to the closure as the first argument
-            let sp = push_to_stack(sp, HardwareSavedRegisters::from_pc_and_r0(
-                (call_closure as extern "C" fn(&mut Option<F>)) as u32,
-                sp as u32,
-            ));
+            let sp = push_to_stack(
+                sp,
+                HardwareSavedRegisters::from_pc_and_r0(
+                    (call_closure as extern "C" fn(&mut Option<F>)) as u32,
+                    sp as u32,
+                ),
+            );
             let sp = push_to_stack(sp, SoftwareSavedRegisters::new());
             sp
         };
 
-        let Ok(task_id) = critical_section::with(|cs| {
+        let task_id = critical_section::with(|cs| {
             let mut state = SCHEDULER_STATE.borrow_ref_mut(cs);
-            let Some(state) = state.as_mut()
-            else {
+            let Some(state) = state.as_mut() else {
                 // The init of `SCHEDULER_STATE` is guaranteed by the existence of `Scheduler`
                 unreachable!()
             };
 
-            state.stack_pointers.push(initial_sp as usize)?;
-            Ok::<usize, usize>(state.stack_pointers.len() - 1)
-        }) else {
-            return Err(Error::TaskFull)
-        };
+            let task = TaskInfo {
+                stack_pointer: initial_sp as usize,
+            };
+
+            let Some((free_idx, _)) = state.tasks.iter().enumerate().find(|(_, v)| v.is_none())
+            else {
+                return Err(Error::TaskFull);
+            };
+
+            state.tasks[free_idx] = Some(task);
+
+            state
+                .task_queue
+                .push_back(free_idx)
+                .or(Err(Error::TaskFull))?;
+
+            Ok(free_idx)
+        })?;
 
         info!("Task #{} created", task_id);
-        debug!("Stack from={:08X} to={:08X}", stack.0.as_ptr_range().start as usize, stack.0.as_ptr_range().end as usize);
+        debug!(
+            "Stack from={:08X} to={:08X}",
+            stack.0.as_ptr_range().start as usize,
+            stack.0.as_ptr_range().end as usize
+        );
 
-        Ok(TaskHandle {
-            id: task_id,
-        })
+        Ok(TaskHandle { id: task_id })
     }
 }
 
@@ -186,16 +214,37 @@ extern "C" fn PendSV() {
 extern "C" fn switch_context(orig_sp: usize) -> usize {
     let next_sp = critical_section::with(|cs| {
         let mut state = SCHEDULER_STATE.borrow_ref_mut(cs);
-        let Some(state) = state.as_mut()
-        else {
+        let Some(state) = state.as_mut() else {
             panic!("Scheduler not initialized")
         };
 
-        state.stack_pointers[state.current_task] = orig_sp;
-        state.current_task = (state.current_task + 1) % state.stack_pointers.len();
-        state.stack_pointers[state.current_task]
+        let orig_task_id = state.current_task;
+
+        // Dequeue and enqueue task ID
+        let Some(next_task_id) = state.task_queue.pop_front() else {
+            unreachable!()
+        };
+        state
+            .task_queue
+            .push_back(orig_task_id)
+            .unwrap_or_else(|_| unreachable!());
+
+        state.current_task = next_task_id;
+
+        // Update stack pointer
+        if let Some(ref mut orig_task) = state.tasks[orig_task_id] {
+            orig_task.stack_pointer = orig_sp;
+        };
+        let Some(ref next_task) = state.tasks[next_task_id] else {
+            unreachable!()
+        };
+
+        next_task.stack_pointer
     });
-    trace!("Context switch: orig_sp = {:08X}, next_sp = {:08X}", orig_sp, next_sp);
+    trace!(
+        "Context switch: orig_sp = {:08X}, next_sp = {:08X}",
+        orig_sp, next_sp
+    );
     next_sp
 }
 
@@ -209,7 +258,11 @@ unsafe fn push_to_stack<T>(sp: *mut u8, obj: T) -> *mut u8 {
     unsafe {
         let size = size_of::<T>();
         // Ensure 8-byte alignment
-        let size = if size % 8 == 0 { size } else { size + 8 - (size % 8) };
+        let size = if size % 8 == 0 {
+            size
+        } else {
+            size + 8 - (size % 8)
+        };
 
         let sp = sp.byte_sub(size);
         *(sp as *mut T) = obj;
@@ -258,9 +311,7 @@ impl TaskConfig {
 
 impl Default for TaskConfig {
     fn default() -> Self {
-        Self {
-            priority: 1,
-        }
+        Self { priority: 1 }
     }
 }
 
@@ -287,7 +338,7 @@ impl HardwareSavedRegisters {
             r12: 0,
             lr: 0,
             pc,
-            xpsr: 1 << 24,  // Thumb state
+            xpsr: 1 << 24, // Thumb state
         }
     }
 }
