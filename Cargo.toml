@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "taskette",
+    "tests/qemu",
+    "examples/qemu",
+]
+resolver = "2"
