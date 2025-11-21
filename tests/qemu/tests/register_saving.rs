@@ -17,7 +17,7 @@ static TASK2_STACK: StaticCell<Stack<8192>> = StaticCell::new();
 #[cortex_m_rt::entry]
 fn main() -> ! {
     let peripherals = cortex_m::Peripherals::take().unwrap();
-    let mut scheduler = Scheduler::init(
+    let scheduler = Scheduler::init(
         peripherals.SYST,
         peripherals.SCB,
         12_000_000,

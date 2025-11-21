@@ -11,23 +11,35 @@ use heapless::Deque;
 use log::{debug, info, trace};
 
 const MAX_NUM_TASKS: usize = 10;
+const MAX_PRIORITY: usize = 10;
+const IDLE_TASK_ID: usize = 0;
+const IDLE_PRIORITY: usize = 0;
+
+const QUEUE_LEN: usize = MAX_NUM_TASKS + 1;
 
 static SCHEDULER_STATE: Mutex<RefCell<Option<SchedulerState>>> = Mutex::new(RefCell::new(None));
 
+#[derive(Clone, Debug)]
 struct SchedulerState {
     tasks: [Option<TaskInfo>; MAX_NUM_TASKS],
-    task_queue: Deque<usize, MAX_NUM_TASKS>,
+    /// Task queues for each priority
+    queues: [Deque<usize, QUEUE_LEN>; MAX_PRIORITY + 1],
     current_task: usize,
+    started: bool,
 }
 
 /// Task Control Block (TCB)
+#[derive(Clone, Debug)]
 struct TaskInfo {
     stack_pointer: usize,
+    priority: usize,
 }
 
 #[derive(Clone, Debug)]
 pub enum Error {
     TaskFull,
+    InvalidPriority,
+    NotFound,
 }
 
 #[non_exhaustive]
@@ -48,8 +60,8 @@ impl Default for SchedulerConfig {
 }
 
 pub struct Scheduler {
-    syst: cortex_m::peripheral::SYST,
-    scb: cortex_m::peripheral::SCB,
+    syst: Mutex<RefCell<cortex_m::peripheral::SYST>>,
+    scb: Mutex<RefCell<cortex_m::peripheral::SCB>>,
     clock_freq: u32,
     config: SchedulerConfig,
 }
@@ -68,14 +80,22 @@ impl Scheduler {
                 false
             } else {
                 let mut tasks = [const { None }; MAX_NUM_TASKS];
-                let mut task_queue = Deque::new();
-                task_queue.push_back(0).unwrap_or_else(|_| unreachable!());
                 // Reserve Task #0 for idle task
-                tasks[0] = Some(TaskInfo { stack_pointer: 0 });
+                tasks[IDLE_TASK_ID] = Some(TaskInfo {
+                    stack_pointer: 0,
+                    priority: IDLE_PRIORITY,
+                });
+                // Idle task has priority 0
+                let mut queues = [const { Deque::new() }; MAX_PRIORITY + 1];
+                queues[IDLE_PRIORITY]
+                    .push_back(IDLE_TASK_ID)
+                    .unwrap_or_else(|_| unreachable!());
+
                 *scheduler_state = Some(SchedulerState {
                     tasks,
-                    task_queue,
-                    current_task: 0,
+                    queues,
+                    current_task: IDLE_TASK_ID,
+                    started: false,
                 });
 
                 true
@@ -86,14 +106,14 @@ impl Scheduler {
         }
 
         Some(Scheduler {
-            syst,
-            scb,
+            syst: Mutex::new(RefCell::new(syst)),
+            scb: Mutex::new(RefCell::new(scb)),
             clock_freq,
             config,
         })
     }
 
-    pub fn start(&mut self) -> ! {
+    pub fn start(&self) -> ! {
         critical_section::with(|_| unsafe {
             // Copy the value of Main (current) Stack Pointer to the the Process Stack Pointer
             cortex_m::register::psp::write(cortex_m::register::msp::read());
@@ -105,24 +125,34 @@ impl Scheduler {
         });
 
         // On armv6m `set_priority` is not atomic
-        critical_section::with(|_| unsafe {
+        critical_section::with(|cs| unsafe {
+            let mut scb = self.scb.borrow_ref_mut(cs);
             // Set priorities of core exceptions
-            self.scb.set_priority(
+            scb.set_priority(
                 SystemHandler::PendSV,
                 255, /* Lowest possible priority */
             );
-            self.scb.set_priority(
+            scb.set_priority(
                 SystemHandler::SysTick,
                 255, /* Lowest possible priority */
             );
         });
 
+        critical_section::with(|cs| {
+            let mut state = SCHEDULER_STATE.borrow_ref_mut(cs);
+            if let Some(state) = state.as_mut() {
+                state.started = true;
+            }
+        });
+
         // Configure the SysTick timer
-        self.syst.set_clock_source(SystClkSource::Core);
-        self.syst
-            .set_reload(self.clock_freq / self.config.tick_freq);
-        self.syst.enable_interrupt();
-        self.syst.enable_counter();
+        critical_section::with(|cs| {
+            let mut syst = self.syst.borrow_ref_mut(cs);
+            syst.set_clock_source(SystClkSource::Core);
+            syst.set_reload(self.clock_freq / self.config.tick_freq);
+            syst.enable_interrupt();
+            syst.enable_counter();
+        });
 
         info!("Kernel started");
 
@@ -147,7 +177,7 @@ impl Scheduler {
             let sp = push_to_stack(
                 sp,
                 HardwareSavedRegisters::from_pc_and_r0(
-                    (call_closure as extern "C" fn(&mut Option<F>)) as u32,
+                    (call_closure as extern "C" fn(&mut Option<F>) -> !) as u32,
                     sp as u32,
                 ),
             );
@@ -164,6 +194,7 @@ impl Scheduler {
 
             let task = TaskInfo {
                 stack_pointer: initial_sp as usize,
+                priority: config.priority,
             };
 
             let Some((free_idx, _)) = state.tasks.iter().enumerate().find(|(_, v)| v.is_none())
@@ -174,19 +205,30 @@ impl Scheduler {
             state.tasks[free_idx] = Some(task);
 
             state
-                .task_queue
+                .queues
+                .get_mut(config.priority)
+                .ok_or(Error::InvalidPriority)?
                 .push_back(free_idx)
                 .or(Err(Error::TaskFull))?;
 
             Ok(free_idx)
         })?;
 
-        info!("Task #{} created", task_id);
+        info!("Task #{} created (priority {})", task_id, config.priority);
         debug!(
             "Stack from={:08X} to={:08X}",
             stack.0.as_ptr_range().start as usize,
             stack.0.as_ptr_range().end as usize
         );
+
+        critical_section::with(|cs| {
+            let state = SCHEDULER_STATE.borrow_ref(cs);
+            if let Some(state) = state.as_ref() {
+                if state.started {
+                    yield_now(); // Preempt if the new task has higher priority
+                }
+            };
+        });
 
         Ok(TaskHandle { id: task_id })
     }
@@ -201,17 +243,17 @@ extern "C" fn PendSV() {
         "mrs r0, psp",  // Read the process stack pointer (PSP, because the SP is MSP now)
         "stmfd r0!, {{r4-r11}}", // Save the remaining registers in the process stack
         "push {{lr}}",   // Save LR (that is modified by the next BL) in the main stack
-        "bl {switch_context}",  // Call `switch_context` function. R0 (process stack pointer) is used as the first argument and the return value.
+        "bl {select_task}",  // Call `select_task` function. R0 (process stack pointer) is used as the first argument and the return value.
         "pop {{lr}}",    // Restore LR (to EXC_RETURN) from the main stack
         "ldmia r0!, {{r4-r11}}",  // Restore the registers not saved by the hardware from the process stack
-        "msr psp, r0",   // Change PSP into the value returned by `switch_context`
+        "msr psp, r0",   // Change PSP into the value returned by `select_task`
         "bx lr",
-        switch_context = sym switch_context,
+        select_task = sym select_task,
     );
     // Hardware restores registers R0-R3 and R12 from the new stack
 }
 
-extern "C" fn switch_context(orig_sp: usize) -> usize {
+extern "C" fn select_task(orig_sp: usize) -> usize {
     let next_sp = critical_section::with(|cs| {
         let mut state = SCHEDULER_STATE.borrow_ref_mut(cs);
         let Some(state) = state.as_mut() else {
@@ -219,26 +261,33 @@ extern "C" fn switch_context(orig_sp: usize) -> usize {
         };
 
         let orig_task_id = state.current_task;
+        // Original task may be removed from the task list, so this is conditional
+        if let Some(ref mut orig_task) = state.tasks[orig_task_id] {
+            // Enqueue the original task into the queue of the original priority
+            // (Placed afte the dequeue in order to avoid overflow)
+            state.queues[orig_task.priority]
+                .push_back(orig_task_id)
+                .unwrap_or_else(|_| unreachable!());
 
-        // Dequeue and enqueue task ID
-        let Some(next_task_id) = state.task_queue.pop_front() else {
+            // Update stack pointer
+            orig_task.stack_pointer = orig_sp;
+        }
+
+        // Determine the highest priority of runnable tasks
+        let highest_priority = (0..=MAX_PRIORITY)
+            .rev()
+            .find(|i| !state.queues[*i].is_empty())
+            .unwrap_or(0);
+
+        // Dequeue the new task ID from the queue of the highest priority
+        let Some(next_task_id) = state.queues[highest_priority].pop_front() else {
             unreachable!()
         };
-        state
-            .task_queue
-            .push_back(orig_task_id)
-            .unwrap_or_else(|_| unreachable!());
-
         state.current_task = next_task_id;
 
-        // Update stack pointer
-        if let Some(ref mut orig_task) = state.tasks[orig_task_id] {
-            orig_task.stack_pointer = orig_sp;
-        };
         let Some(ref next_task) = state.tasks[next_task_id] else {
             unreachable!()
         };
-
         next_task.stack_pointer
     });
     trace!(
@@ -269,6 +318,48 @@ unsafe fn push_to_stack<T>(sp: *mut u8, obj: T) -> *mut u8 {
 
         sp
     }
+}
+
+fn remove_task(id: usize) -> Result<(), Error> {
+    critical_section::with(|cs| {
+        let mut state = SCHEDULER_STATE.borrow_ref_mut(cs);
+        let Some(state) = state.as_mut() else {
+            panic!("Scheduler not initialized");
+        };
+
+        // Remove from the task queue
+        for priority in 0..=MAX_PRIORITY {
+            let mut new_queue = Deque::new();
+            let mut removed = false;
+            // Filter elements of the queue
+            for elem in state.queues[priority].iter() {
+                if *elem != id {
+                    new_queue
+                        .push_back(*elem)
+                        .unwrap_or_else(|_| unreachable!());
+                } else {
+                    removed = true;
+                }
+            }
+
+            state.queues[priority] = new_queue;
+
+            // A task should exist in only one priority
+            if removed {
+                break;
+            }
+        }
+
+        // Remove from the task list
+        let Some(task) = state.tasks.get_mut(id) else {
+            return Err(Error::NotFound);
+        };
+        *task = None;
+
+        info!("Task #{} removed", id);
+
+        Ok(())
+    })
 }
 
 pub fn yield_now() {
@@ -372,10 +463,24 @@ impl SoftwareSavedRegisters {
     }
 }
 
-extern "C" fn call_closure<F: FnOnce()>(f: &mut Option<F>) {
+extern "C" fn call_closure<F: FnOnce()>(f: &mut Option<F>) -> ! {
     if let Some(f) = f.take() {
         f()
     } else {
         unreachable!()
     }
+
+    let id = critical_section::with(|cs| {
+        let state = SCHEDULER_STATE.borrow_ref(cs);
+        let Some(state) = state.as_ref() else {
+            unreachable!()
+        };
+        state.current_task
+    });
+
+    info!("Task #{} finished", id);
+
+    remove_task(id).expect("Failed to remove the finished task");
+
+    loop {}
 }

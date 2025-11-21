@@ -223,6 +223,8 @@ dependencies = [
  "cortex-m",
  "cortex-m-rt",
  "cortex-m-semihosting",
+ "critical-section",
+ "heapless",
  "panic-semihosting",
  "static_cell",
  "taskette",

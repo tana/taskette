@@ -7,6 +7,10 @@ edition = "2024"
 name = "register_saving"
 harness = false
 
+[[test]]
+name = "preemption"
+harness = false
+
 [dependencies]
 cortex-m = { version = "0.7.7", features = ["critical-section-single-core"] }
 cortex-m-rt = "0.7.5"
@@ -14,3 +18,5 @@ cortex-m-semihosting = "0.5.0"
 panic-semihosting = "0.6.0"
 static_cell = "2.1.1"
 taskette = { version = "0.1.0", path = "../../taskette" }
+heapless = "0.9.2"
+critical-section = "1.2.0"
