@@ -211,12 +211,9 @@ version = "0.1.0"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
- "cortex-m-semihosting",
  "critical-section",
  "heapless",
  "log",
- "panic-semihosting",
- "static_cell",
 ]
 
 [[package]]
@@ -229,19 +226,6 @@ dependencies = [
  "critical-section",
  "heapless",
  "log",
- "panic-semihosting",
- "static_cell",
-]
-
-[[package]]
-name = "taskette-tests-qemu"
-version = "0.1.0"
-dependencies = [
- "cortex-m",
- "cortex-m-rt",
- "cortex-m-semihosting",
- "critical-section",
- "heapless",
  "panic-semihosting",
  "static_cell",
  "taskette",

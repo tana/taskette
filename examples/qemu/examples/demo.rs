@@ -20,7 +20,7 @@ fn main() -> ! {
     info!("Started");
 
     let peripherals = cortex_m::Peripherals::take().unwrap();
-    let mut scheduler = Scheduler::init(
+    let scheduler = Scheduler::init(
         peripherals.SYST,
         peripherals.SCB,
         12_000_000,
