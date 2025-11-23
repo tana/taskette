@@ -1,4 +1,4 @@
-name: Rust
+name: CI
 
 on:
   push:
@@ -20,9 +20,10 @@ jobs:
       with:
         toolchain: stable
         targets: thumbv7m-none-eabi
-    - uses: docker/setup-qemu-action@v3
-      with:
-        platforms: arm
+    - name: Install QEMU
+      run: |
+        sudo apt update
+        sudo apt install qemu-system-arm
     - name: Run QEMU tests
       working-directory: tests/qemu
       run: cargo test --verbose
