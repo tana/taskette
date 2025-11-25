@@ -11,7 +11,8 @@ use rp235x_hal::{
     timer::CopyableTimer0,
 };
 use static_cell::StaticCell;
-use taskette::{Scheduler, SchedulerConfig, Stack, TaskConfig};
+use taskette::{SchedulerConfig, TaskConfig};
+use taskette_cortex_m::{Stack, init_scheduler};
 use usb_device::{
     UsbError,
     bus::{UsbBus, UsbBusAllocator},
@@ -68,7 +69,7 @@ fn main() -> ! {
 
     // Init scheduler
     let core_peripherals = cortex_m::Peripherals::take().unwrap();
-    let scheduler = Scheduler::init(
+    let scheduler = init_scheduler(
         core_peripherals.SYST,
         core_peripherals.SCB,
         clocks.system_clock.freq().to_Hz(),

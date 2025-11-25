@@ -9,7 +9,8 @@
 use cortex_m_semihosting::{debug, hprintln};
 use panic_semihosting as _;
 use static_cell::StaticCell;
-use taskette::{Scheduler, SchedulerConfig, Stack, TaskConfig};
+use taskette::{SchedulerConfig, TaskConfig};
+use taskette_cortex_m::{Stack, init_scheduler};
 
 static TASK1_STACK: StaticCell<Stack<8192>> = StaticCell::new();
 static TASK2_STACK: StaticCell<Stack<8192>> = StaticCell::new();
@@ -17,7 +18,7 @@ static TASK2_STACK: StaticCell<Stack<8192>> = StaticCell::new();
 #[cortex_m_rt::entry]
 fn main() -> ! {
     let peripherals = cortex_m::Peripherals::take().unwrap();
-    let scheduler = Scheduler::init(
+    let scheduler = init_scheduler(
         peripherals.SYST,
         peripherals.SCB,
         12_000_000,

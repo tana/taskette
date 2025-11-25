@@ -5,12 +5,17 @@
 
 use core::cell::RefCell;
 
-use cortex_m_semihosting::{debug::{self, EXIT_FAILURE, EXIT_SUCCESS}, hprint, hprintln};
+use cortex_m_semihosting::{
+    debug::{self, EXIT_FAILURE, EXIT_SUCCESS},
+    hprint, hprintln,
+};
 use critical_section::Mutex;
 use heapless::Vec;
 use panic_semihosting as _;
 use static_cell::StaticCell;
-use taskette::{Scheduler, SchedulerConfig, Stack, TaskConfig};
+use taskette::{Scheduler, TaskConfig};
+use taskette::SchedulerConfig;
+use taskette_cortex_m::{Stack, init_scheduler};
 
 static SCHEDULER: StaticCell<Scheduler> = StaticCell::new();
 static TASK_LOW_STACK: StaticCell<Stack<8192>> = StaticCell::new();
@@ -22,7 +27,7 @@ static NUMBERS: Mutex<RefCell<Vec<i32, 2000>>> = Mutex::new(RefCell::new(Vec::ne
 fn main() -> ! {
     let peripherals = cortex_m::Peripherals::take().unwrap();
     let scheduler = SCHEDULER.init(
-        Scheduler::init(
+        init_scheduler(
             peripherals.SYST,
             peripherals.SCB,
             12_000_000,

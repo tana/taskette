@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 taskette = { path = "../../taskette" }
+taskette-cortex-m = { path = "../../taskette-cortex-m" }
 rp235x-hal = "0.3.0"
 cortex-m = "0.7.7"
 panic-halt = "1.0.0"

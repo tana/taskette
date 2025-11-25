@@ -57,15 +57,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cortex-m-semihosting"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c23234600452033cc77e4b761e740e02d2c4168e11dbf36ab14a0f58973592b0"
-dependencies = [
- "cortex-m",
-]
-
-[[package]]
 name = "critical-section"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -122,22 +113,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d5439c4ad607c3c23abf66de8c8bf57ba8adcd1f129e699851a6e43935d339d"
 
 [[package]]
-name = "panic-semihosting"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee8a3e1233d9073d76a870223512ce4eeea43c067a94a445c13bd6d792d7b1ab"
-dependencies = [
- "cortex-m",
- "cortex-m-semihosting",
-]
-
-[[package]]
-name = "portable-atomic"
-version = "1.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f84267b20a16ea918e43c6a88433c2d54fa145c92a811b5b047ccbe153674483"
-
-[[package]]
 name = "proc-macro2"
 version = "1.0.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -186,19 +161,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 
 [[package]]
-name = "static_cell"
-version = "2.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0530892bb4fa575ee0da4b86f86c667132a94b74bb72160f58ee5a4afec74c23"
-dependencies = [
- "portable-atomic",
-]
-
-[[package]]
 name = "syn"
-version = "2.0.110"
+version = "2.0.111"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a99801b5bd34ede4cf3fc688c5919368fea4e4814a4664359503e6015b280aea"
+checksum = "390cc9a294ab71bdb1aa2e99d13be9c753cd2d7bd6560c77118597410c4d2e87"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -226,22 +192,6 @@ dependencies = [
  "heapless",
  "log",
  "taskette",
-]
-
-[[package]]
-name = "taskette-examples-qemu"
-version = "0.1.0"
-dependencies = [
- "cortex-m",
- "cortex-m-rt",
- "cortex-m-semihosting",
- "critical-section",
- "heapless",
- "log",
- "panic-semihosting",
- "static_cell",
- "taskette",
- "taskette-cortex-m",
 ]
 
 [[package]]

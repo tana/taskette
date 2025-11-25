@@ -5,7 +5,8 @@ use heapless::String;
 use log::info;
 use panic_semihosting as _;
 use static_cell::StaticCell;
-use taskette::{Scheduler, SchedulerConfig, Stack, TaskConfig};
+use taskette::{SchedulerConfig, TaskConfig};
+use taskette_cortex_m::{Stack, init_scheduler};
 
 static LOGGER: Logger = Logger;
 
@@ -20,7 +21,7 @@ fn main() -> ! {
     info!("Started");
 
     let peripherals = cortex_m::Peripherals::take().unwrap();
-    let scheduler = Scheduler::init(
+    let scheduler = init_scheduler(
         peripherals.SYST,
         peripherals.SCB,
         12_000_000,

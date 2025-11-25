@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 taskette = { path = "../../taskette" }
+taskette-cortex-m = { path = "../../taskette-cortex-m" }
 cortex-m = { version = "0.7.7", features = ["critical-section-single-core"] }
 cortex-m-rt = "0.7.5"
 critical-section = "1.2.0"
