@@ -121,7 +121,7 @@ impl Scheduler {
 
         loop {
             trace!("Idle");
-            cortex_m::asm::wfi();
+            unsafe { arch::_taskette_wait_for_interrupt(); }
         }
     }
 

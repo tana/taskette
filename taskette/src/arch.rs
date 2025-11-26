@@ -10,6 +10,7 @@ unsafe extern "Rust" {
         arg: *const u8,
         arg_size: usize,
     ) -> *mut u8;
+    pub unsafe fn _taskette_wait_for_interrupt();
 }
 
 pub fn yield_now() {

@@ -166,6 +166,11 @@ pub fn _taskette_init_stack(sp: *mut u8, pc: usize, arg: *const u8, arg_size: us
     }
 }
 
+#[unsafe(no_mangle)]
+pub fn _taskette_wait_for_interrupt() {
+    cortex_m::asm::wfi();
+}
+
 unsafe fn push_to_stack(sp: *mut u8, obj: *const u8, obj_size: usize) -> *mut u8 {
     unsafe {
         let size = obj_size;
