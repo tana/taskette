@@ -19,7 +19,7 @@ jobs:
     - uses: dtolnay/rust-toolchain@stable
       with:
         toolchain: stable
-        targets: thumbv7m-none-eabi
+        targets: thumbv7em-none-eabihf
     - name: Install QEMU
       run: |
         sudo apt update

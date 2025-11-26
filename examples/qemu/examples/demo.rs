@@ -24,7 +24,7 @@ fn main() -> ! {
     let scheduler = init_scheduler(
         peripherals.SYST,
         peripherals.SCB,
-        12_000_000,
+        168_000_000,
         SchedulerConfig::default().with_tick_freq(10),
     ).unwrap();
 
