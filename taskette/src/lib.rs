@@ -2,7 +2,7 @@
 
 mod arch;
 
-use core::cell::RefCell;
+use core::{cell::RefCell, mem::ManuallyDrop};
 
 use critical_section::Mutex;
 use heapless::Deque;
@@ -128,9 +128,12 @@ impl Scheduler {
     pub fn spawn<F: FnOnce() + Send + 'static, S: StackAllocation>(
         &self,
         func: F,
-        stack: &mut S,
+        stack: S,
         config: TaskConfig,
     ) -> Result<TaskHandle, Error> {
+        // TODO: drop when task finished
+        let mut stack = ManuallyDrop::new(stack);
+
         // Prepare initial stack of the task
         let initial_sp = unsafe {
             let arg1 = Some(func);
