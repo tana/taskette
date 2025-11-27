@@ -11,6 +11,10 @@ harness = false
 name = "preemption"
 harness = false
 
+[[test]]
+name = "fpu"
+harness = false
+
 [dependencies]
 taskette = { path = "../../taskette" }
 taskette-cortex-m = { path = "../../taskette-cortex-m" }
