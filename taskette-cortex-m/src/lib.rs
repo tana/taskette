@@ -7,7 +7,7 @@ use cortex_m::{
 use log::trace;
 use taskette::{Scheduler, SchedulerConfig};
 
-#[repr(C)]
+#[repr(C, align(8))]
 #[derive(Clone, Debug)]
 struct HardwareSavedRegisters {
     r0: u32,
@@ -35,7 +35,7 @@ impl HardwareSavedRegisters {
     }
 }
 
-#[repr(C)]
+#[repr(C, align(8))]
 #[derive(Clone, Debug)]
 struct SoftwareSavedRegisters {
     // Software-saved registers
@@ -47,10 +47,11 @@ struct SoftwareSavedRegisters {
     r9: u32,
     r10: u32,
     r11: u32,
+    exc_return: u32,    // LR on exception
 }
 
 impl SoftwareSavedRegisters {
-    fn new() -> Self {
+    fn new(fpu_regs_saved: bool) -> Self {
         Self {
             r4: 0,
             r5: 0,
@@ -60,6 +61,11 @@ impl SoftwareSavedRegisters {
             r9: 0,
             r10: 0,
             r11: 0,
+            exc_return: if fpu_regs_saved {
+                0xFFFFFFED  // thread-mode, PSP, FPU regs
+            } else {
+                0xFFFFFFFD  // thread-mode, PSP, no FPU regs
+            },
         }
     }
 }
@@ -74,18 +80,59 @@ pub fn init_scheduler(
 }
 
 /// Context switching procedure
+#[cfg(target_abi = "eabi")] // No FPU
 #[unsafe(no_mangle)]
 #[unsafe(naked)]
 extern "C" fn PendSV() {
     // Registers {R0-R3, R12, LR, PC, xPSR} are saved in the process stack by the hardware
     core::arch::naked_asm!(
         "mrs r0, psp",  // Read the process stack pointer (PSP, because the SP is MSP now)
-        "stmfd r0!, {{r4-r11}}", // Save the remaining registers in the process stack
-        "push {{lr}}",   // Save LR (that is modified by the next BL) in the main stack
+
+        "sub r0, #4",   // For stack alignment
+        "stmdb r0!, {{r4-r11,lr}}", // Save the remaining registers and EXC_RETURN in the process stack
+
         "bl {select_task}",  // Call `select_task` function. R0 (process stack pointer) is used as the first argument and the return value.
-        "pop {{lr}}",    // Restore LR (to EXC_RETURN) from the main stack
-        "ldmia r0!, {{r4-r11}}",  // Restore the registers not saved by the hardware from the process stack
+
+        "ldmia r0!, {{r4-r11,lr}}",  // Restore the registers not saved by the hardware and EXC_RETURN from the process stack
+        "add r0, #4",   // For stack alignment
+
         "msr psp, r0",   // Change PSP into the value returned by `select_task`
+
+        "bx lr",
+        select_task = sym taskette::select_task,
+    );
+    // Hardware restores registers R0-R3 and R12 from the new stack
+}
+
+/// Context switching procedure
+/// For chips with an FPU.
+/// The approach based on the Armv8-M User Guide example: https://github.com/ARM-software/m-profile-user-guide-examples/tree/main/Exception_model/context-switch-fp
+#[cfg(target_abi = "eabihf")] // FPU
+#[unsafe(no_mangle)]
+#[unsafe(naked)]
+extern "C" fn PendSV() {
+    // Registers {R0-R3, R12, LR, PC, xPSR, S0-S15} are saved in the process stack by the hardware
+    core::arch::naked_asm!(
+        "mrs r0, psp",  // Read the process stack pointer (PSP, because the SP is MSP now)
+
+        "tst lr, #0x00000010",  // Check Bit 4 (FType) of EXC_RETURN (0 indicates the hardware-saved stack frame includes FP registers)
+        "it eq",   // The next instruction is conditional
+        "vstmdbeq r0!, {{s16-s31}}",    // Save the FP registers not saved by the hardware (if FType==0)
+
+        "sub r0, #4",   // For stack alignment
+        "stmdb r0!, {{r4-r11,lr}}", // Save the remaining registers and EXC_RETURN in the process stack
+
+        "bl {select_task}",  // Call `select_task` function. R0 (process stack pointer) is used as the first argument and the return value.
+
+        "ldmia r0!, {{r4-r11,lr}}",  // Restore the registers not saved by the hardware and EXC_RETURN from the process stack
+        "add r0, #4",   // For stack alignment
+
+        "tst lr, #0x00000010",  // Check Bit 4 (FType) of EXC_RETURN (0 indicates the hardware-saved stack frame includes FP registers)
+        "it eq",   // The next instruction is conditional
+        "vldmiaeq r0!, {{s16-s31}}",    // Load the FP registers not saved by the hardware (if FType==0)
+
+        "msr psp, r0",   // Change PSP into the value returned by `select_task`
+
         "bx lr",
         select_task = sym taskette::select_task,
     );
@@ -159,7 +206,7 @@ pub fn _taskette_init_stack(sp: *mut u8, pc: usize, arg: *const u8, arg_size: us
         );
         let sp = push_to_stack(
             sp,
-            &SoftwareSavedRegisters::new() as *const _ as *const u8,
+            &SoftwareSavedRegisters::new(false) as *const _ as *const u8,
             core::mem::size_of::<SoftwareSavedRegisters>(),
         );
         sp
