@@ -25,7 +25,7 @@ fn main() -> ! {
         peripherals.SYST,
         peripherals.SCB,
         168_000_000,
-        SchedulerConfig::default().with_tick_freq(10),
+        SchedulerConfig::default().with_tick_freq(100),
     ).unwrap();
 
     let task1_str = String::<8>::try_from("aaaa").unwrap();

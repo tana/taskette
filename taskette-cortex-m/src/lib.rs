@@ -175,6 +175,7 @@ pub fn _taskette_setup(clock_freq: u32, tick_freq: u32) {
     });
 
     // Configure the SysTick timer
+    assert!(clock_freq / tick_freq <= 0xFFFFFF);    // SysTick has 24-bit limit
     syst.set_clock_source(SystClkSource::Core);
     syst.set_reload(clock_freq / tick_freq);
     syst.enable_interrupt();
