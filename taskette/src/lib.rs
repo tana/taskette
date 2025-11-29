@@ -103,7 +103,7 @@ impl Scheduler {
 
     pub fn start(&self) -> ! {
         unsafe {
-            arch::_taskette_setup_interrupt();
+            arch::_taskette_setup(self.clock_freq, self.config.tick_freq);
         }
 
         critical_section::with(|cs| {
@@ -114,7 +114,7 @@ impl Scheduler {
         });
 
         unsafe {
-            arch::_taskette_setup_timer(self.clock_freq, self.config.tick_freq);
+            arch::_taskette_start_timer();
         }
 
         info!("Kernel started");

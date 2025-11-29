@@ -146,9 +146,10 @@ fn SysTick() {
 }
 
 #[unsafe(no_mangle)]
-pub fn _taskette_setup_interrupt() {
+pub fn _taskette_setup(clock_freq: u32, tick_freq: u32) {
     let peripherals = unsafe { cortex_m::Peripherals::steal() };
     let mut scb = peripherals.SCB;
+    let mut syst = peripherals.SYST;
 
     critical_section::with(|_| unsafe {
         // Copy the value of Main (current) Stack Pointer to the the Process Stack Pointer
@@ -172,20 +173,20 @@ pub fn _taskette_setup_interrupt() {
             255, /* Lowest possible priority */
         );
     });
+
+    // Configure the SysTick timer
+    syst.set_clock_source(SystClkSource::Core);
+    syst.set_reload(clock_freq / tick_freq);
+    syst.enable_interrupt();
 }
 
 #[unsafe(no_mangle)]
-pub fn _taskette_setup_timer(clock_freq: u32, tick_freq: u32) {
+pub fn _taskette_start_timer() {
     let peripherals = unsafe { cortex_m::Peripherals::steal() };
     let mut syst = peripherals.SYST;
 
-    // Configure the SysTick timer
-    critical_section::with(|_| {
-        syst.set_clock_source(SystClkSource::Core);
-        syst.set_reload(clock_freq / tick_freq);
-        syst.enable_interrupt();
-        syst.enable_counter();
-    });
+    // Start the SysTick timer
+    syst.enable_counter();
 }
 
 #[unsafe(no_mangle)]

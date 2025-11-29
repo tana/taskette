@@ -1,8 +1,8 @@
 //! Interface for architecture-dependent `no_mangle` functions
 
 unsafe extern "Rust" {
-    pub unsafe fn _taskette_setup_interrupt();
-    pub unsafe fn _taskette_setup_timer(clock_freq: u32, tick_freq: u32);
+    pub unsafe fn _taskette_setup(clock_freq: u32, tick_freq: u32);
+    pub unsafe fn _taskette_start_timer();
     pub unsafe fn _taskette_yield_now();
     pub unsafe fn _taskette_init_stack(
         sp: *mut u8,
