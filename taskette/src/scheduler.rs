@@ -6,10 +6,10 @@ use log::{debug, info, trace};
 
 use crate::{Error, StackAllocation, TaskConfig, TaskHandle, arch, yield_now};
 
-const MAX_NUM_TASKS: usize = 10;
-const MAX_PRIORITY: usize = 10;
-const IDLE_TASK_ID: usize = 0;
-const IDLE_PRIORITY: usize = 0;
+pub(crate) const MAX_NUM_TASKS: usize = 10;
+pub(crate) const MAX_PRIORITY: usize = 10;
+pub(crate) const IDLE_TASK_ID: usize = 0;
+pub(crate) const IDLE_PRIORITY: usize = 0;
 
 const QUEUE_LEN: usize = MAX_NUM_TASKS + 1;
 
@@ -20,6 +20,7 @@ static SCHEDULER_STATE: Mutex<RefCell<Option<SchedulerState>>> = Mutex::new(RefC
 struct TaskInfo {
     stack_pointer: usize,
     priority: usize,
+    blocked: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -66,6 +67,7 @@ impl Scheduler {
                 tasks[IDLE_TASK_ID] = Some(TaskInfo {
                     stack_pointer: 0,
                     priority: IDLE_PRIORITY,
+                    blocked: false,
                 });
                 // Idle task has priority 0
                 let mut queues = [const { Deque::new() }; MAX_PRIORITY + 1];
@@ -110,7 +112,9 @@ impl Scheduler {
 
         loop {
             trace!("Idle");
-            unsafe { arch::_taskette_wait_for_interrupt(); }
+            unsafe {
+                arch::_taskette_wait_for_interrupt();
+            }
         }
     }
 
@@ -146,6 +150,7 @@ impl Scheduler {
             let task = TaskInfo {
                 stack_pointer: initial_sp as usize,
                 priority: config.priority,
+                blocked: false,
             };
 
             let Some((free_idx, _)) = state.tasks.iter().enumerate().find(|(_, v)| v.is_none())
@@ -194,7 +199,9 @@ pub unsafe extern "C" fn select_task(orig_sp: usize) -> usize {
 
         let orig_task_id = state.current_task;
         // Original task may be removed from the task list, so this is conditional
-        if let Some(ref mut orig_task) = state.tasks[orig_task_id] {
+        if let Some(ref mut orig_task) = state.tasks[orig_task_id]
+            && !orig_task.blocked
+        {
             // Enqueue the original task into the queue of the original priority
             // (Placed afte the dequeue in order to avoid overflow)
             state.queues[orig_task.priority]
@@ -227,6 +234,67 @@ pub unsafe extern "C" fn select_task(orig_sp: usize) -> usize {
         orig_sp, next_sp
     );
     next_sp
+}
+
+pub(crate) fn block_task(id: usize) -> Result<(), Error> {
+    critical_section::with(|cs| {
+        let mut state = SCHEDULER_STATE.borrow_ref_mut(cs);
+        let Some(state) = state.as_mut() else {
+            return Err(Error::NotInitialized);
+        };
+
+        let Some(ref mut task) = state.tasks[id] else {
+            return Err(Error::NotFound);
+        };
+        task.blocked = true;
+        // Remove the task from the task queue
+        state.queues[task.priority].retain(|elem| *elem != id);
+
+        Ok(())
+    })?;
+
+    trace!("Task #{} became blocked", id);
+
+    yield_now();
+
+    Ok(())
+}
+
+pub(crate) fn unblock_task(id: usize) -> Result<(), Error> {
+    critical_section::with(|cs| {
+        let mut state = SCHEDULER_STATE.borrow_ref_mut(cs);
+        let Some(state) = state.as_mut() else {
+            return Err(Error::NotInitialized);
+        };
+
+        let Some(ref mut task) = state.tasks[id] else {
+            return Err(Error::NotFound);
+        };
+        task.blocked = false;
+        // Add task at the end of the task queue
+        state.queues[task.priority]
+            .push_back(id)
+            .or(Err(Error::TaskFull))?;
+
+        Ok(())
+    })?;
+
+    trace!("Task #{} is unblocked", id);
+
+    yield_now();
+
+    Ok(())
+}
+
+pub(crate) fn current_task_id() -> Result<usize, Error> {
+    critical_section::with(|cs| {
+        let state = SCHEDULER_STATE.borrow_ref(cs);
+        let Some(state) = state.as_ref() else {
+            return Err(Error::NotInitialized);
+        };
+
+        Ok(state.current_task)
+    })
 }
 
 fn remove_task(id: usize) -> Result<(), Error> {
