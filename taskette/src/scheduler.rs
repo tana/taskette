@@ -199,14 +199,14 @@ pub unsafe extern "C" fn select_task(orig_sp: usize) -> usize {
 
         let orig_task_id = state.current_task;
         // Original task may be removed from the task list, so this is conditional
-        if let Some(ref mut orig_task) = state.tasks[orig_task_id]
-            && !orig_task.blocked
-        {
-            // Enqueue the original task into the queue of the original priority
-            // (Placed afte the dequeue in order to avoid overflow)
-            state.queues[orig_task.priority]
-                .push_back(orig_task_id)
-                .unwrap_or_else(|_| unreachable!());
+        if let Some(ref mut orig_task) = state.tasks[orig_task_id] {
+            if !orig_task.blocked {
+                // Enqueue the original task into the queue of the original priority
+                // (Placed afte the dequeue in order to avoid overflow)
+                state.queues[orig_task.priority]
+                    .push_back(orig_task_id)
+                    .unwrap_or_else(|_| unreachable!());
+            }
 
             // Update stack pointer
             orig_task.stack_pointer = orig_sp;
