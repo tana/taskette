@@ -4,7 +4,7 @@ use critical_section::Mutex;
 use heapless::Deque;
 use log::{debug, info, trace};
 
-use crate::{Error, StackAllocation, TaskConfig, TaskHandle, arch, yield_now};
+use crate::{Error, StackAllocation, TaskConfig, TaskHandle, arch, timer, yield_now};
 
 pub(crate) const MAX_NUM_TASKS: usize = 10;
 pub(crate) const MAX_PRIORITY: usize = 10;
@@ -81,6 +81,8 @@ impl Scheduler {
                     current_task: IDLE_TASK_ID,
                     started: false,
                 });
+
+                timer::init();
 
                 true
             }
@@ -188,6 +190,14 @@ impl Scheduler {
 
         Ok(TaskHandle { id: task_id })
     }
+}
+
+pub fn handle_tick() {
+    trace!("tick handler");
+
+    timer::tick();
+
+    yield_now();
 }
 
 pub unsafe extern "C" fn select_task(orig_sp: usize) -> usize {

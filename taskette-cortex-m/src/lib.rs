@@ -47,7 +47,7 @@ struct SoftwareSavedRegisters {
     r9: u32,
     r10: u32,
     r11: u32,
-    exc_return: u32,    // LR on exception
+    exc_return: u32, // LR on exception
 }
 
 impl SoftwareSavedRegisters {
@@ -62,9 +62,9 @@ impl SoftwareSavedRegisters {
             r10: 0,
             r11: 0,
             exc_return: if fpu_regs_saved {
-                0xFFFFFFED  // thread-mode, PSP, FPU regs
+                0xFFFFFFED // thread-mode, PSP, FPU regs
             } else {
-                0xFFFFFFFD  // thread-mode, PSP, no FPU regs
+                0xFFFFFFFD // thread-mode, PSP, no FPU regs
             },
         }
     }
@@ -141,8 +141,7 @@ extern "C" fn PendSV() {
 
 #[cortex_m_rt::exception]
 fn SysTick() {
-    trace!("SysTick handler");
-    taskette::yield_now();
+    taskette::handle_tick();
 }
 
 #[unsafe(no_mangle)]
@@ -175,7 +174,7 @@ pub fn _taskette_setup(clock_freq: u32, tick_freq: u32) {
     });
 
     // Configure the SysTick timer
-    assert!(clock_freq / tick_freq <= 0xFFFFFF);    // SysTick has 24-bit limit
+    assert!(clock_freq / tick_freq <= 0xFFFFFF); // SysTick has 24-bit limit
     syst.set_clock_source(SystClkSource::Core);
     syst.set_reload(clock_freq / tick_freq);
     syst.enable_interrupt();
