@@ -9,7 +9,7 @@
 use cortex_m_semihosting::{debug, hprintln};
 use panic_semihosting as _;
 use static_cell::StaticCell;
-use taskette::{SchedulerConfig, TaskConfig};
+use taskette::scheduler::SchedulerConfig;
 use taskette_cortex_m::{Stack, init_scheduler};
 
 static TASK1_STACK: StaticCell<Stack<8192>> = StaticCell::new();

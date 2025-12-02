@@ -4,7 +4,7 @@ use critical_section::Mutex;
 use heapless::Deque;
 use log::{debug, info, trace};
 
-use crate::{Error, StackAllocation, TaskConfig, TaskHandle, arch, timer, yield_now};
+use crate::{Error, arch::{self, StackAllocation, yield_now}, task::{TaskConfig, TaskHandle}, timer};
 
 pub(crate) const MAX_NUM_TASKS: usize = 10;
 pub(crate) const MAX_PRIORITY: usize = 10;

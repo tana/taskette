@@ -13,8 +13,7 @@ use critical_section::Mutex;
 use heapless::Vec;
 use panic_semihosting as _;
 use static_cell::StaticCell;
-use taskette::{Scheduler, TaskConfig};
-use taskette::SchedulerConfig;
+use taskette::{scheduler::{Scheduler, SchedulerConfig}, task::TaskConfig};
 use taskette_cortex_m::{Stack, init_scheduler};
 
 static SCHEDULER: StaticCell<Scheduler> = StaticCell::new();

@@ -112,6 +112,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d5439c4ad607c3c23abf66de8c8bf57ba8adcd1f129e699851a6e43935d339d"
 
 [[package]]
+name = "portable-atomic"
+version = "1.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f84267b20a16ea918e43c6a88433c2d54fa145c92a811b5b047ccbe153674483"
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -177,6 +183,7 @@ dependencies = [
  "critical-section",
  "heapless",
  "log",
+ "portable-atomic",
 ]
 
 [[package]]
@@ -186,8 +193,6 @@ dependencies = [
  "cortex-m",
  "cortex-m-rt",
  "critical-section",
- "heapless",
- "log",
  "taskette",
 ]
 

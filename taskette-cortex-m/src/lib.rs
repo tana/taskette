@@ -4,8 +4,7 @@ use cortex_m::{
     peripheral::{SCB, SYST, scb::SystemHandler, syst::SystClkSource},
     register::control::Spsel,
 };
-use log::trace;
-use taskette::{Scheduler, SchedulerConfig};
+use taskette::{arch::StackAllocation, scheduler::{Scheduler, SchedulerConfig}};
 
 #[repr(C, align(8))]
 #[derive(Clone, Debug)]
@@ -76,7 +75,7 @@ pub fn init_scheduler(
     clock_freq: u32,
     config: SchedulerConfig,
 ) -> Option<Scheduler> {
-    unsafe { taskette::Scheduler::init(clock_freq, config) }
+    unsafe { Scheduler::init(clock_freq, config) }
 }
 
 /// Context switching procedure
@@ -99,7 +98,7 @@ extern "C" fn PendSV() {
         "msr psp, r0",   // Change PSP into the value returned by `select_task`
 
         "bx lr",
-        select_task = sym taskette::select_task,
+        select_task = sym taskette::scheduler::select_task,
     );
     // Hardware restores registers R0-R3 and R12 from the new stack
 }
@@ -134,14 +133,14 @@ extern "C" fn PendSV() {
         "msr psp, r0",   // Change PSP into the value returned by `select_task`
 
         "bx lr",
-        select_task = sym taskette::select_task,
+        select_task = sym taskette::scheduler::select_task,
     );
     // Hardware restores registers R0-R3 and R12 from the new stack
 }
 
 #[cortex_m_rt::exception]
 fn SysTick() {
-    taskette::handle_tick();
+    taskette::scheduler::handle_tick();
 }
 
 #[unsafe(no_mangle)]
@@ -247,7 +246,7 @@ impl<const N: usize> Stack<N> {
     }
 }
 
-impl<const N: usize> taskette::StackAllocation for &mut Stack<N> {
+impl<const N: usize> StackAllocation for &mut Stack<N> {
     fn as_mut_slice(&mut self) -> &mut [u8] {
         &mut self.0
     }

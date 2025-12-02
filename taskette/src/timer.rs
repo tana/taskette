@@ -1,9 +1,12 @@
+//! Implements a heap based timer, which is a variation of Scheme 3 described in the following paper:
+//!     G. Varghese and T. Lauck, “Hashed and hierarchical timing wheels: data structures for the efficient implementation of a timer facility,” in Proceedings of the eleventh ACM Symposium on Operating systems principles - SOSP ’87, Austin, Texas, United States, 1987.
+
 use core::{cell::RefCell, sync::atomic::Ordering};
 
 use critical_section::Mutex;
 use heapless::{BinaryHeap, binary_heap::Min};
 
-use crate::{Error, Futex};
+use crate::{Error, futex::Futex};
 
 const MAX_TIMER_REGS: usize = 32;
 
@@ -36,8 +39,6 @@ impl PartialEq for TimerRegistry {
 
 impl Eq for TimerRegistry {}
 
-/// Implements a heap based timer, which is a variation of Scheme 3 described in the following paper:
-///     G. Varghese and T. Lauck, “Hashed and hierarchical timing wheels: data structures for the efficient implementation of a timer facility,” in Proceedings of the eleventh ACM Symposium on Operating systems principles - SOSP ’87, Austin, Texas, United States, 1987.
 struct Timer {
     time: u64,
     queue: BinaryHeap<TimerRegistry, Min, MAX_TIMER_REGS>,

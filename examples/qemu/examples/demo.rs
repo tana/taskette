@@ -5,7 +5,7 @@ use heapless::String;
 use log::info;
 use panic_semihosting as _;
 use static_cell::StaticCell;
-use taskette::{SchedulerConfig, TaskConfig};
+use taskette::{scheduler::SchedulerConfig, task::TaskConfig};
 use taskette_cortex_m::{Stack, init_scheduler};
 
 static LOGGER: Logger = Logger;

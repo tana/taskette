@@ -11,7 +11,7 @@ use rp235x_hal::{
     timer::CopyableTimer0,
 };
 use static_cell::StaticCell;
-use taskette::{SchedulerConfig, TaskConfig};
+use taskette::{scheduler::SchedulerConfig, task::TaskConfig};
 use taskette_cortex_m::{Stack, init_scheduler};
 use usb_device::{
     UsbError,
