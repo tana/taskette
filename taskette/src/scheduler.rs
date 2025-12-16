@@ -197,14 +197,17 @@ pub fn spawn<F: FnOnce() + Send + 'static, S: StackAllocation>(
         stack.as_mut_slice().as_ptr_range().end as usize
     );
 
-    critical_section::with(|cs| {
-        let state = SCHEDULER_STATE.borrow_ref(cs);
-        if let Some(state) = state.as_ref() {
-            if state.started {
-                yield_now(); // Preempt if the new task has higher priority
-            }
-        };
+    let scheduler_started = critical_section::with(|cs| {
+        if let Some(state) = SCHEDULER_STATE.borrow_ref(cs).as_ref() {
+            state.started
+        } else {
+            false
+        }
     });
+
+    if scheduler_started {
+        yield_now(); // Preempt if the new task has higher priority
+    }
 
     Ok(TaskHandle { id: task_id })
 }
