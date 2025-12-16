@@ -4,7 +4,12 @@ use critical_section::Mutex;
 use heapless::Deque;
 use log::{debug, info, trace};
 
-use crate::{Error, arch::{self, StackAllocation, yield_now}, task::{TaskConfig, TaskHandle}, timer};
+use crate::{
+    Error,
+    arch::{self, StackAllocation, yield_now},
+    task::{TaskConfig, TaskHandle},
+    timer,
+};
 
 pub(crate) const MAX_NUM_TASKS: usize = 10;
 pub(crate) const MAX_PRIORITY: usize = 10;
@@ -29,6 +34,9 @@ struct SchedulerState {
     tasks: [Option<TaskInfo>; MAX_NUM_TASKS],
     /// Task queues for each priority
     queues: [Deque<usize, QUEUE_LEN>; MAX_PRIORITY + 1],
+    /// Bit map for finding highest priority of runnable tasks
+    /// `(priority_map & (1 << n)) != 0` when a task with priority n is present
+    priority_map: u32,
     current_task: usize,
     started: bool,
 }
@@ -57,9 +65,7 @@ pub struct Scheduler {
 
 impl Scheduler {
     pub unsafe fn init(clock_freq: u32, config: SchedulerConfig) -> Option<Self> {
-        critical_section::with(|cs| {
-            SCHEDULER_CONFIG.replace(cs, Some(config))
-        });
+        critical_section::with(|cs| SCHEDULER_CONFIG.replace(cs, Some(config)));
 
         if !critical_section::with(|cs| {
             let mut scheduler_state = SCHEDULER_STATE.borrow_ref_mut(cs);
@@ -83,6 +89,7 @@ impl Scheduler {
                 *scheduler_state = Some(SchedulerState {
                     tasks,
                     queues,
+                    priority_map: 0b1,    // Indicates the idle task (priority 0) is present
                     current_task: IDLE_TASK_ID,
                     started: false,
                 });
@@ -131,9 +138,8 @@ impl Scheduler {
 }
 
 pub fn get_config() -> Result<SchedulerConfig, Error> {
-    critical_section::with(|cs| {
-        SCHEDULER_CONFIG.borrow_ref(cs).clone()
-    }).ok_or(Error::NotInitialized)
+    critical_section::with(|cs| SCHEDULER_CONFIG.borrow_ref(cs).clone())
+        .ok_or(Error::NotInitialized)
 }
 
 pub fn spawn<F: FnOnce() + Send + 'static, S: StackAllocation>(
@@ -141,6 +147,10 @@ pub fn spawn<F: FnOnce() + Send + 'static, S: StackAllocation>(
     stack: S,
     config: TaskConfig,
 ) -> Result<TaskHandle, Error> {
+    if config.priority > MAX_PRIORITY {
+        return Err(Error::InvalidPriority);
+    }
+
     // TODO: drop when task finished
     let mut stack = ManuallyDrop::new(stack);
 
@@ -169,19 +179,13 @@ pub fn spawn<F: FnOnce() + Send + 'static, S: StackAllocation>(
             blocked: false,
         };
 
-        let Some((free_idx, _)) = state.tasks.iter().enumerate().find(|(_, v)| v.is_none())
-        else {
+        let Some((free_idx, _)) = state.tasks.iter().enumerate().find(|(_, v)| v.is_none()) else {
             return Err(Error::TaskFull);
         };
 
         state.tasks[free_idx] = Some(task);
 
-        state
-            .queues
-            .get_mut(config.priority)
-            .ok_or(Error::InvalidPriority)?
-            .push_back(free_idx)
-            .or(Err(Error::TaskFull))?;
+        enqueue_task(&mut state.queues, &mut state.priority_map, free_idx, config.priority)?;
 
         Ok(free_idx)
     })?;
@@ -226,9 +230,7 @@ pub unsafe extern "C" fn select_task(orig_sp: usize) -> usize {
             if !orig_task.blocked {
                 // Enqueue the original task into the queue of the original priority
                 // (Placed afte the dequeue in order to avoid overflow)
-                state.queues[orig_task.priority]
-                    .push_back(orig_task_id)
-                    .unwrap_or_else(|_| unreachable!());
+                enqueue_task(&mut state.queues, &mut state.priority_map, orig_task_id, orig_task.priority).unwrap_or_else(|_| unreachable!());
             }
 
             // Update stack pointer
@@ -236,13 +238,11 @@ pub unsafe extern "C" fn select_task(orig_sp: usize) -> usize {
         }
 
         // Determine the highest priority of runnable tasks
-        let highest_priority = (0..=MAX_PRIORITY)
-            .rev()
-            .find(|i| !state.queues[*i].is_empty())
-            .unwrap_or(0);
+        const { assert!(MAX_PRIORITY <= 31) }
+        let highest_priority = (31 - state.priority_map.leading_zeros()) as usize;
 
         // Dequeue the new task ID from the queue of the highest priority
-        let Some(next_task_id) = state.queues[highest_priority].pop_front() else {
+        let Some(next_task_id) = dequeue_task(&mut state.queues, &mut state.priority_map, highest_priority) else {
             unreachable!()
         };
         state.current_task = next_task_id;
@@ -307,9 +307,7 @@ pub(crate) fn unblock_task(id: usize) -> Result<(), Error> {
 
         task.blocked = false;
         // Add task at the end of the task queue
-        state.queues[task.priority]
-            .push_back(id)
-            .or(Err(Error::TaskFull))?;
+        enqueue_task(&mut state.queues, &mut state.priority_map, id, task.priority)?;
 
         Ok(())
     })?;
@@ -339,39 +337,48 @@ fn remove_task(id: usize) -> Result<(), Error> {
             panic!("Scheduler not initialized");
         };
 
-        // Remove from the task queue
-        for priority in 0..=MAX_PRIORITY {
-            let mut new_queue = Deque::new();
-            let mut removed = false;
-            // Filter elements of the queue
-            for elem in state.queues[priority].iter() {
-                if *elem != id {
-                    new_queue
-                        .push_back(*elem)
-                        .unwrap_or_else(|_| unreachable!());
-                } else {
-                    removed = true;
-                }
-            }
-
-            state.queues[priority] = new_queue;
-
-            // A task should exist in only one priority
-            if removed {
-                break;
-            }
-        }
-
         // Remove from the task list
-        let Some(task) = state.tasks.get_mut(id) else {
+        let Some(ref task) = state.tasks[id] else {
             return Err(Error::NotFound);
         };
-        *task = None;
+        let priority = task.priority;
+        state.tasks[id] = None;
+
+        // Remove from the task queue
+        remove_task_from_queue(&mut state.queues, &mut state.priority_map, id, priority);
 
         info!("Task #{} removed", id);
 
         Ok(())
     })
+}
+
+fn enqueue_task(queues: &mut [Deque<usize, QUEUE_LEN>], priority_map: &mut u32, task_id: usize, priority: usize) -> Result<(), Error> {
+    queues[priority]
+        .push_back(task_id)
+        .or(Err(Error::TaskFull))?;
+
+    *priority_map |= 1 << priority;
+    
+    Ok(())
+}
+
+fn dequeue_task(queues: &mut [Deque<usize, QUEUE_LEN>], priority_map: &mut u32, priority: usize) -> Option<usize> {
+    let task_id = queues[priority].pop_front();
+
+    if queues[priority].is_empty() {
+        *priority_map &= !(1 << priority);
+    }
+
+    task_id
+}
+
+fn remove_task_from_queue(queues: &mut [Deque<usize, QUEUE_LEN>], priority_map: &mut u32, task_id: usize, priority: usize) {
+    queues[priority].retain(|elem| *elem != task_id);
+
+    if queues[priority].is_empty() {
+        *priority_map &= !(1 << priority);
+    }
 }
 
 extern "C" fn call_closure<F: FnOnce()>(f: &mut Option<F>) -> ! {
