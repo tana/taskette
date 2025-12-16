@@ -6,13 +6,12 @@ use defmt_rtt as _;
 use embedded_hal::{delay::DelayNs, digital::OutputPin};
 use panic_halt as _;
 use rp235x_hal::{
-    Clock, Timer,
-    gpio::{FunctionSio, Pin, PullDown, SioOutput, bank0::Gpio25},
-    timer::CopyableTimer0,
+    Clock, gpio::{FunctionSio, Pin, PullDown, SioOutput, bank0::Gpio25},
 };
 use static_cell::StaticCell;
-use taskette::{scheduler::SchedulerConfig, task::TaskConfig};
+use taskette::{scheduler::{SchedulerConfig, spawn}, task::TaskConfig};
 use taskette_cortex_m::{Stack, init_scheduler};
+use taskette_utils::delay::Delay;
 use usb_device::{
     UsbError,
     bus::{UsbBus, UsbBusAllocator},
@@ -27,6 +26,7 @@ static BLINK_TASK_STACK: StaticCell<Stack<8192>> = StaticCell::new();
 static USB_TASK_STACK: StaticCell<Stack<8192>> = StaticCell::new();
 
 const XTAL_FREQ: u32 = 12_000_000;
+const TICK_FREQ: u32 = 1000;
 
 #[rp235x_hal::entry]
 fn main() -> ! {
@@ -48,7 +48,6 @@ fn main() -> ! {
     .unwrap();
 
     // Init peripherals for blinking
-    let timer = rp235x_hal::Timer::new_timer0(peripherals.TIMER0, &mut peripherals.RESETS, &clocks);
     let sio = rp235x_hal::Sio::new(peripherals.SIO);
     let pins = rp235x_hal::gpio::Pins::new(
         peripherals.IO_BANK0,
@@ -73,15 +72,14 @@ fn main() -> ! {
         core_peripherals.SYST,
         core_peripherals.SCB,
         clocks.system_clock.freq().to_Hz(),
-        SchedulerConfig::default().with_tick_freq(1000),
+        SchedulerConfig::default().with_tick_freq(TICK_FREQ),
     )
     .unwrap();
 
     // Start LED blinking task
     let blink_task_stack = BLINK_TASK_STACK.init(Stack::new());
-    let _blink_task = scheduler
-        .spawn(
-            move || blink_task_func(led_pin, timer),
+    let _blink_task = spawn(
+            move || blink_task_func(led_pin),
             blink_task_stack,
             TaskConfig::default(),
         )
@@ -89,8 +87,7 @@ fn main() -> ! {
 
     // Start USB task
     let usb_task_stack = USB_TASK_STACK.init(Stack::new());
-    let _usb_task = scheduler
-        .spawn(
+    let _usb_task = spawn(
             move || usb_task_func(usb_bus),
             usb_task_stack,
             TaskConfig::default(),
@@ -102,16 +99,17 @@ fn main() -> ! {
 
 fn blink_task_func(
     mut led_pin: Pin<Gpio25, FunctionSio<SioOutput>, PullDown>,
-    mut timer: Timer<CopyableTimer0>,
 ) {
     info!("Blink task started");
 
+    let mut delay = Delay::new().unwrap();
+
     loop {
         led_pin.set_high().unwrap();
-        timer.delay_ms(500);
+        delay.delay_ms(500);
 
         led_pin.set_low().unwrap();
-        timer.delay_ms(500);
+        delay.delay_ms(500);
     }
 }
 

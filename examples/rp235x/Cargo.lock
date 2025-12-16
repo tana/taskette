@@ -599,8 +599,17 @@ dependencies = [
  "static_cell",
  "taskette",
  "taskette-cortex-m",
+ "taskette-utils",
  "usb-device",
  "usbd-serial",
+]
+
+[[package]]
+name = "taskette-utils"
+version = "0.1.0"
+dependencies = [
+ "embedded-hal 1.0.0",
+ "taskette",
 ]
 
 [[package]]
