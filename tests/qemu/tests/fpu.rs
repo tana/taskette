@@ -9,7 +9,7 @@
 use cortex_m_semihosting::{debug, hprintln};
 use panic_semihosting as _;
 use static_cell::StaticCell;
-use taskette::{scheduler::SchedulerConfig, task::TaskConfig};
+use taskette::{scheduler::{SchedulerConfig, spawn}, task::TaskConfig};
 use taskette_cortex_m::{Stack, init_scheduler};
 
 static TASK1_STACK: StaticCell<Stack<8192>> = StaticCell::new();
@@ -26,7 +26,7 @@ fn main() -> ! {
     ).unwrap();
 
     let task1_stack = TASK1_STACK.init(Stack::new());
-    let _task1 = scheduler.spawn(move || unsafe {
+    let _task1 = spawn(move || unsafe {
         loop {
             // Continuously overwrite FPU registers
             core::arch::asm!(
@@ -99,7 +99,7 @@ fn main() -> ! {
     }, task1_stack, TaskConfig::default()).unwrap();
 
     let task2_stack = TASK2_STACK.init(Stack::new());
-    let _task2 = scheduler.spawn(move || unsafe {
+    let _task2 = spawn(move || unsafe {
         let mut result = true;
 
         for _ in 0..100 {

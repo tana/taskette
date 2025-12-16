@@ -13,7 +13,10 @@ use critical_section::Mutex;
 use heapless::Vec;
 use panic_semihosting as _;
 use static_cell::StaticCell;
-use taskette::{scheduler::{Scheduler, SchedulerConfig}, task::TaskConfig};
+use taskette::{
+    scheduler::{Scheduler, SchedulerConfig, spawn},
+    task::TaskConfig,
+};
 use taskette_cortex_m::{Stack, init_scheduler};
 
 static SCHEDULER: StaticCell<Scheduler> = StaticCell::new();
@@ -39,26 +42,24 @@ fn main() -> ! {
     let task_low_stack = TASK_LOW_STACK.init(Stack::new());
     let task_high_stack = TASK_HIGH_STACK.init(Stack::new());
 
-    let _task_low = scheduler
-        .spawn(
-            || task_low(scheduler, task_high_stack),
-            task_low_stack,
-            TaskConfig::default().with_priority(1),
-        )
-        .unwrap();
+    let _task_low = spawn(
+        || task_low(task_high_stack),
+        task_low_stack,
+        TaskConfig::default().with_priority(1),
+    )
+    .unwrap();
 
     scheduler.start();
 }
 
-fn task_low(scheduler: &Scheduler, task_high_stack: &mut Stack<8192>) {
+fn task_low(task_high_stack: &mut Stack<8192>) {
     // Launch high-priority task
-    let _task_high = scheduler
-        .spawn(
-            task_high,
-            task_high_stack,
-            TaskConfig::default().with_priority(2),
-        )
-        .unwrap();
+    let _task_high = spawn(
+        task_high,
+        task_high_stack,
+        TaskConfig::default().with_priority(2),
+    )
+    .unwrap();
 
     // This will be delayed until the high-priority task completes
     for i in 1000..2000 {

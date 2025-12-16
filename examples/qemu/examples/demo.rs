@@ -6,7 +6,7 @@ use heapless::String;
 use log::info;
 use panic_semihosting as _;
 use static_cell::StaticCell;
-use taskette::{scheduler::SchedulerConfig, task::TaskConfig};
+use taskette::{scheduler::{SchedulerConfig, spawn}, task::TaskConfig};
 use taskette_cortex_m::{Stack, init_scheduler};
 use taskette_utils::delay::Delay;
 
@@ -34,8 +34,8 @@ fn main() -> ! {
 
     let task1_str = String::<8>::try_from("aaaa").unwrap();
     let task1_stack = TASK1_STACK.init(Stack::new());
-    let _task1 = scheduler.spawn(move || {
-        let mut delay = Delay::new(TICK_FREQ);
+    let _task1 = spawn(move || {
+        let mut delay = Delay::new().unwrap();
         let mut i = 0;
         loop {
             log::info!("task1 {} {}", i, task1_str);
@@ -46,8 +46,8 @@ fn main() -> ! {
 
     let task2_str = String::<8>::try_from("bbbb").unwrap();
     let task2_stack = TASK2_STACK.init(Stack::new());
-    let _task2 = scheduler.spawn(move || {
-        let mut delay = Delay::new(TICK_FREQ);
+    let _task2 = spawn(move || {
+        let mut delay = Delay::new().unwrap();
         let mut i = 0;
         loop {
             log::info!("task2 {} {}", i, task2_str);

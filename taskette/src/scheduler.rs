@@ -14,6 +14,7 @@ pub(crate) const IDLE_PRIORITY: usize = 0;
 const QUEUE_LEN: usize = MAX_NUM_TASKS + 1;
 
 static SCHEDULER_STATE: Mutex<RefCell<Option<SchedulerState>>> = Mutex::new(RefCell::new(None));
+static SCHEDULER_CONFIG: Mutex<RefCell<Option<SchedulerConfig>>> = Mutex::new(RefCell::new(None));
 
 /// Task Control Block (TCB)
 #[derive(Clone, Debug)]
@@ -32,6 +33,7 @@ struct SchedulerState {
     started: bool,
 }
 
+#[derive(Clone, Debug)]
 #[non_exhaustive]
 pub struct SchedulerConfig {
     pub tick_freq: u32,
@@ -51,11 +53,14 @@ impl Default for SchedulerConfig {
 
 pub struct Scheduler {
     clock_freq: u32,
-    config: SchedulerConfig,
 }
 
 impl Scheduler {
     pub unsafe fn init(clock_freq: u32, config: SchedulerConfig) -> Option<Self> {
+        critical_section::with(|cs| {
+            SCHEDULER_CONFIG.replace(cs, Some(config))
+        });
+
         if !critical_section::with(|cs| {
             let mut scheduler_state = SCHEDULER_STATE.borrow_ref_mut(cs);
             if scheduler_state.is_some() {
@@ -91,12 +96,16 @@ impl Scheduler {
             return None;
         }
 
-        Some(Scheduler { clock_freq, config })
+        Some(Scheduler { clock_freq })
     }
 
     pub fn start(&self) -> ! {
+        let tick_freq = critical_section::with(|cs| {
+            SCHEDULER_CONFIG.borrow_ref(cs).as_ref().unwrap().tick_freq
+        });
+
         unsafe {
-            arch::_taskette_setup(self.clock_freq, self.config.tick_freq);
+            arch::_taskette_setup(self.clock_freq, tick_freq);
         }
 
         critical_section::with(|cs| {
@@ -119,77 +128,81 @@ impl Scheduler {
             }
         }
     }
+}
 
-    pub fn spawn<F: FnOnce() + Send + 'static, S: StackAllocation>(
-        &self,
-        func: F,
-        stack: S,
-        config: TaskConfig,
-    ) -> Result<TaskHandle, Error> {
-        // TODO: drop when task finished
-        let mut stack = ManuallyDrop::new(stack);
+pub fn get_config() -> Result<SchedulerConfig, Error> {
+    critical_section::with(|cs| {
+        SCHEDULER_CONFIG.borrow_ref(cs).clone()
+    }).ok_or(Error::NotInitialized)
+}
 
-        // Prepare initial stack of the task
-        let initial_sp = unsafe {
-            let arg1 = Some(func);
-            let sp = arch::_taskette_init_stack(
-                stack.as_mut_slice().as_mut_ptr_range().end,
-                (call_closure as extern "C" fn(&mut Option<F>) -> !) as usize,
-                &arg1 as *const _ as *const u8,
-                core::mem::size_of_val(&arg1),
-            );
+pub fn spawn<F: FnOnce() + Send + 'static, S: StackAllocation>(
+    func: F,
+    stack: S,
+    config: TaskConfig,
+) -> Result<TaskHandle, Error> {
+    // TODO: drop when task finished
+    let mut stack = ManuallyDrop::new(stack);
 
-            sp
-        };
-
-        let task_id = critical_section::with(|cs| {
-            let mut state = SCHEDULER_STATE.borrow_ref_mut(cs);
-            let Some(state) = state.as_mut() else {
-                // The init of `SCHEDULER_STATE` is guaranteed by the existence of `Scheduler`
-                unreachable!()
-            };
-
-            let task = TaskInfo {
-                stack_pointer: initial_sp as usize,
-                priority: config.priority,
-                blocked: false,
-            };
-
-            let Some((free_idx, _)) = state.tasks.iter().enumerate().find(|(_, v)| v.is_none())
-            else {
-                return Err(Error::TaskFull);
-            };
-
-            state.tasks[free_idx] = Some(task);
-
-            state
-                .queues
-                .get_mut(config.priority)
-                .ok_or(Error::InvalidPriority)?
-                .push_back(free_idx)
-                .or(Err(Error::TaskFull))?;
-
-            Ok(free_idx)
-        })?;
-
-        info!("Task #{} created (priority {})", task_id, config.priority);
-        debug!(
-            "Stack from={:08X} to={:08X}",
-            stack.as_mut_slice().as_ptr_range().start as usize,
-            stack.as_mut_slice().as_ptr_range().end as usize
+    // Prepare initial stack of the task
+    let initial_sp = unsafe {
+        let arg1 = Some(func);
+        let sp = arch::_taskette_init_stack(
+            stack.as_mut_slice().as_mut_ptr_range().end,
+            (call_closure as extern "C" fn(&mut Option<F>) -> !) as usize,
+            &arg1 as *const _ as *const u8,
+            core::mem::size_of_val(&arg1),
         );
 
-        critical_section::with(|cs| {
-            let state = SCHEDULER_STATE.borrow_ref(cs);
-            if let Some(state) = state.as_ref() {
-                if state.started {
-                    yield_now(); // Preempt if the new task has higher priority
-                }
-            };
-        });
+        sp
+    };
 
-        Ok(TaskHandle { id: task_id })
-    }
+    let task_id = critical_section::with(|cs| {
+        let mut state = SCHEDULER_STATE.borrow_ref_mut(cs);
+        let Some(state) = state.as_mut() else {
+            return Err(Error::NotInitialized);
+        };
+
+        let task = TaskInfo {
+            stack_pointer: initial_sp as usize,
+            priority: config.priority,
+            blocked: false,
+        };
+
+        let Some((free_idx, _)) = state.tasks.iter().enumerate().find(|(_, v)| v.is_none())
+        else {
+            return Err(Error::TaskFull);
+        };
+
+        state.tasks[free_idx] = Some(task);
+
+        state
+            .queues
+            .get_mut(config.priority)
+            .ok_or(Error::InvalidPriority)?
+            .push_back(free_idx)
+            .or(Err(Error::TaskFull))?;
+
+        Ok(free_idx)
+    })?;
+
+    info!("Task #{} created (priority {})", task_id, config.priority);
+    debug!(
+        "Stack from={:08X} to={:08X}",
+        stack.as_mut_slice().as_ptr_range().start as usize,
+        stack.as_mut_slice().as_ptr_range().end as usize
+    );
+
+    critical_section::with(|cs| {
+        let state = SCHEDULER_STATE.borrow_ref(cs);
+        if let Some(state) = state.as_ref() {
+            if state.started {
+                yield_now(); // Preempt if the new task has higher priority
+            }
+        };
+    });
+
+    Ok(TaskHandle { id: task_id })
 }
 
 pub fn handle_tick() {

@@ -1,6 +1,6 @@
 //! `embedded-hal`-compatible delay that yields CPU to other tasks instead of busy looping.
 //! The precision is limited by the tick frequency setting of the scheduler (usually order of a millisecond or more).
-use taskette::timer::{current_time, wait_until};
+use taskette::{Error, scheduler::get_config, timer::{current_time, wait_until}};
 
 #[derive(Clone)]
 pub struct Delay {
@@ -8,8 +8,10 @@ pub struct Delay {
 }
 
 impl Delay {
-    pub fn new(tick_freq: u32) -> Self {
-        Self { tick_freq }
+    pub fn new() -> Result<Self, Error> {
+        let tick_freq = get_config()?.tick_freq;
+
+        Ok(Self { tick_freq })
     }
 
     pub fn delay_ticks(&mut self, ticks: u64) {
