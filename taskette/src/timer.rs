@@ -1,12 +1,12 @@
 //! Implements a heap based timer, which is a variation of Scheme 3 described in the following paper:
 //!     G. Varghese and T. Lauck, “Hashed and hierarchical timing wheels: data structures for the efficient implementation of a timer facility,” in Proceedings of the eleventh ACM Symposium on Operating systems principles - SOSP ’87, Austin, Texas, United States, 1987.
 
-use core::{cell::RefCell, sync::atomic::Ordering};
+use core::cell::RefCell;
 
 use critical_section::Mutex;
 use heapless::{BinaryHeap, binary_heap::Min};
 
-use crate::{Error, futex::Futex};
+use crate::{Error, scheduler::{block_task, current_task_id, unblock_task}};
 
 const MAX_TIMER_REGS: usize = 32;
 
@@ -14,8 +14,7 @@ static TIMER: Mutex<RefCell<Option<Timer>>> = Mutex::new(RefCell::new(None));
 
 struct TimerRegistry {
     time: u64,
-    futex: Futex,
-    set_value: usize,
+    task_id: usize,
 }
 
 impl Ord for TimerRegistry {
@@ -66,39 +65,48 @@ pub(crate) fn tick() {
         timer.time += 1;
 
         if let Some(top) = timer.queue.peek() {
-            if top.time >= timer.time {
+            if top.time <= timer.time {
                 // Timer ringing
                 let top = unsafe { timer.queue.pop_unchecked() }; // Safe because the heap is obviously not empty.
-                let _ = wake_timeout(&top);
+                let _ = unblock_task(top.task_id);
             }
         }
     })
 }
 
-/// Registers a one-shot timeout that sets `set_value` to the `futex` and wakes it up after `time` ticks.
-pub fn register_timeout(time: u64, futex: Futex, set_value: usize) -> Result<(), Error> {
+/// Registers a one-shot timeout that wakes the specified task up on `time`.
+pub(crate) fn wait_task_until(time: u64, task_id: usize) -> Result<(), Error> {
     let registry = TimerRegistry {
         time,
-        futex,
-        set_value,
+        task_id,
     };
 
-    critical_section::with(|cs| {
+    let should_block = critical_section::with(|cs| {
         let mut timer = TIMER.borrow_ref_mut(cs);
         let Some(timer) = timer.as_mut() else {
             return Err(Error::NotInitialized);
         };
 
-        if registry.time >= timer.time {
+        if registry.time <= timer.time {
             // The timer is ringing before queueing
-            let _ = wake_timeout(&registry);
-            return Ok(());
+            return Ok(false);
         }
 
         timer.queue.push(registry).or(Err(Error::TimerFull))?;
 
-        Ok(())
-    })
+        Ok(true)
+    })?;
+
+    if should_block {
+        block_task(task_id)?;
+    }
+
+    Ok(())
+}
+
+/// Sleeps the current task until the specificed time.
+pub fn wait_until(time: u64) -> Result<(), Error> {
+    wait_task_until(time, current_task_id()?)
 }
 
 pub fn current_time() -> Result<u64, Error> {
@@ -110,14 +118,4 @@ pub fn current_time() -> Result<u64, Error> {
 
         Ok(timer.time)
     })
-}
-
-fn wake_timeout(registry: &TimerRegistry) -> Result<(), Error> {
-    registry
-        .futex
-        .as_ref()
-        .store(registry.set_value, Ordering::Release);
-    registry.futex.wake_all()?;
-
-    Ok(())
 }

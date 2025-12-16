@@ -256,6 +256,12 @@ pub(crate) fn block_task(id: usize) -> Result<(), Error> {
         let Some(ref mut task) = state.tasks[id] else {
             return Err(Error::NotFound);
         };
+
+        if task.blocked {
+            debug!("Task #{} is already blocked", id);
+            return Ok(());
+        }
+
         task.blocked = true;
         // Remove the task from the task queue
         state.queues[task.priority].retain(|elem| *elem != id);
@@ -280,6 +286,12 @@ pub(crate) fn unblock_task(id: usize) -> Result<(), Error> {
         let Some(ref mut task) = state.tasks[id] else {
             return Err(Error::NotFound);
         };
+
+        if !task.blocked {
+            debug!("Task #{} is not blocked", id);
+            return Ok(());
+        }
+
         task.blocked = false;
         // Add task at the end of the task queue
         state.queues[task.priority]

@@ -222,8 +222,6 @@ dependencies = [
  "cortex-m",
  "cortex-m-rt",
  "critical-section",
- "heapless",
- "log",
  "taskette",
 ]
 
