@@ -1,3 +1,5 @@
+//! Low-level synchronization primitive modeled after Linux `futex` mechanism.
+
 use core::{cell::RefCell, sync::atomic::Ordering};
 
 use critical_section::Mutex;
@@ -9,13 +11,17 @@ use crate::{
     scheduler::{MAX_NUM_TASKS, block_task, current_task_id, unblock_task},
 };
 
+/// Low-level synchronization primitive.
+///
 /// Similar to the Linux `futex` syscall, but realized as a self-contained object instead of an address-to-queue table.
+/// The internal atomic integer can be accessed by `as_ref` method.
 pub struct Futex {
     value: AtomicUsize,
     waiting_tasks: Mutex<RefCell<Deque<usize, MAX_NUM_TASKS>>>,
 }
 
 impl Futex {
+    /// Creates a new futex with the specified initial value of the internal atomic integer.
     pub const fn new(value: usize) -> Self {
         Self {
             value: AtomicUsize::new(value),
@@ -23,6 +29,9 @@ impl Futex {
         }
     }
 
+    /// Blocks the current task indefinitely if the atomic integer equals to `compare_val`.
+    ///
+    /// There is a possibility of spurious wakeup.
     pub fn wait(&self, compare_val: usize) -> Result<(), Error> {
         // Fast path: do nothing if the value is different
         if self.value.load(Ordering::SeqCst) == compare_val {
@@ -46,6 +55,7 @@ impl Futex {
         Ok(())
     }
 
+    /// Unblocks at most `num` tasks blocked on this futex.
     pub fn wake(&self, num: usize) -> Result<(), Error> {
         critical_section::with(|cs| {
             for _ in 0..num {
@@ -62,10 +72,12 @@ impl Futex {
         })
     }
 
+    /// Unblocks at most one task blocked on this futex.
     pub fn wake_one(&self) -> Result<(), Error> {
         self.wake(1)
     }
 
+    /// Unblocks all tasks blocked on this futex.
     pub fn wake_all(&self) -> Result<(), Error> {
         self.wake(MAX_NUM_TASKS)
     }

@@ -1,3 +1,9 @@
+//! Task manipulation functions.
+
+/// Handle object for a task.
+///
+/// This is just a surrogate for a task ID.
+/// Dropping this has no effect on the actual task.
 #[derive(Debug)]
 pub struct TaskHandle {
     pub(crate) id: usize,
@@ -16,6 +22,9 @@ pub struct TaskConfig {
 }
 
 impl TaskConfig {
+    /// Sets task priority.
+    ///
+    /// Higher value means higher priority. 0 is the same as the idle task. Default value is 1.
     pub fn with_priority(self, priority: usize) -> Self {
         Self { priority, ..self }
     }

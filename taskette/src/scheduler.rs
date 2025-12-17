@@ -1,3 +1,7 @@
+//! Task scheduler implementation and related functions.
+//!
+//! It uses fixed priority scheduling with round-robin execution for tasks of the same priority.
+
 use core::{cell::RefCell, mem::ManuallyDrop};
 
 use critical_section::Mutex;
@@ -59,11 +63,18 @@ impl Default for SchedulerConfig {
     }
 }
 
+/// Handle object for scheduler.
+///
+/// Actual state is stored in static variables. Therefore only one instance can be created.
 pub struct Scheduler {
     clock_freq: u32,
 }
 
 impl Scheduler {
+    /// Initializes the scheduler.
+    ///
+    /// Marked unsafe because it uses MCU core peripherals (such as an interrupt controller) without HAL peripheral objects,
+    /// so architecture-specific wrappers (such as `taskette_cortex_m::init_scheduler`) should be used instead.
     pub unsafe fn init(clock_freq: u32, config: SchedulerConfig) -> Option<Self> {
         critical_section::with(|cs| SCHEDULER_CONFIG.replace(cs, Some(config)));
 
@@ -89,7 +100,7 @@ impl Scheduler {
                 *scheduler_state = Some(SchedulerState {
                     tasks,
                     queues,
-                    priority_map: 0b1,    // Indicates the idle task (priority 0) is present
+                    priority_map: 0b1, // Indicates the idle task (priority 0) is present
                     current_task: IDLE_TASK_ID,
                     started: false,
                 });
@@ -106,6 +117,7 @@ impl Scheduler {
         Some(Scheduler { clock_freq })
     }
 
+    /// Starts the scheduler and tasks.
     pub fn start(&self) -> ! {
         let tick_freq = critical_section::with(|cs| {
             SCHEDULER_CONFIG.borrow_ref(cs).as_ref().unwrap().tick_freq
@@ -137,11 +149,13 @@ impl Scheduler {
     }
 }
 
+/// Retrieves configuration of the scheduler.
 pub fn get_config() -> Result<SchedulerConfig, Error> {
     critical_section::with(|cs| SCHEDULER_CONFIG.borrow_ref(cs).clone())
         .ok_or(Error::NotInitialized)
 }
 
+/// Creates a new task and starts it.
 pub fn spawn<F: FnOnce() + Send + 'static, S: StackAllocation>(
     func: F,
     stack: S,
@@ -185,7 +199,12 @@ pub fn spawn<F: FnOnce() + Send + 'static, S: StackAllocation>(
 
         state.tasks[free_idx] = Some(task);
 
-        enqueue_task(&mut state.queues, &mut state.priority_map, free_idx, config.priority)?;
+        enqueue_task(
+            &mut state.queues,
+            &mut state.priority_map,
+            free_idx,
+            config.priority,
+        )?;
 
         Ok(free_idx)
     })?;
@@ -212,6 +231,7 @@ pub fn spawn<F: FnOnce() + Send + 'static, S: StackAllocation>(
     Ok(TaskHandle { id: task_id })
 }
 
+/// INTERNAL USE ONLY
 pub fn handle_tick() {
     trace!("tick handler");
 
@@ -220,6 +240,7 @@ pub fn handle_tick() {
     yield_now();
 }
 
+/// INTERNAL USE ONLY
 pub unsafe extern "C" fn select_task(orig_sp: usize) -> usize {
     let next_sp = critical_section::with(|cs| {
         let mut state = SCHEDULER_STATE.borrow_ref_mut(cs);
@@ -233,7 +254,13 @@ pub unsafe extern "C" fn select_task(orig_sp: usize) -> usize {
             if !orig_task.blocked {
                 // Enqueue the original task into the queue of the original priority
                 // (Placed afte the dequeue in order to avoid overflow)
-                enqueue_task(&mut state.queues, &mut state.priority_map, orig_task_id, orig_task.priority).unwrap_or_else(|_| unreachable!());
+                enqueue_task(
+                    &mut state.queues,
+                    &mut state.priority_map,
+                    orig_task_id,
+                    orig_task.priority,
+                )
+                .unwrap_or_else(|_| unreachable!());
             }
 
             // Update stack pointer
@@ -245,7 +272,9 @@ pub unsafe extern "C" fn select_task(orig_sp: usize) -> usize {
         let highest_priority = (31 - state.priority_map.leading_zeros()) as usize;
 
         // Dequeue the new task ID from the queue of the highest priority
-        let Some(next_task_id) = dequeue_task(&mut state.queues, &mut state.priority_map, highest_priority) else {
+        let Some(next_task_id) =
+            dequeue_task(&mut state.queues, &mut state.priority_map, highest_priority)
+        else {
             unreachable!()
         };
         state.current_task = next_task_id;
@@ -310,7 +339,12 @@ pub(crate) fn unblock_task(id: usize) -> Result<(), Error> {
 
         task.blocked = false;
         // Add task at the end of the task queue
-        enqueue_task(&mut state.queues, &mut state.priority_map, id, task.priority)?;
+        enqueue_task(
+            &mut state.queues,
+            &mut state.priority_map,
+            id,
+            task.priority,
+        )?;
 
         Ok(())
     })?;
@@ -356,17 +390,26 @@ fn remove_task(id: usize) -> Result<(), Error> {
     })
 }
 
-fn enqueue_task(queues: &mut [Deque<usize, QUEUE_LEN>], priority_map: &mut u32, task_id: usize, priority: usize) -> Result<(), Error> {
+fn enqueue_task(
+    queues: &mut [Deque<usize, QUEUE_LEN>],
+    priority_map: &mut u32,
+    task_id: usize,
+    priority: usize,
+) -> Result<(), Error> {
     queues[priority]
         .push_back(task_id)
         .or(Err(Error::TaskFull))?;
 
     *priority_map |= 1 << priority;
-    
+
     Ok(())
 }
 
-fn dequeue_task(queues: &mut [Deque<usize, QUEUE_LEN>], priority_map: &mut u32, priority: usize) -> Option<usize> {
+fn dequeue_task(
+    queues: &mut [Deque<usize, QUEUE_LEN>],
+    priority_map: &mut u32,
+    priority: usize,
+) -> Option<usize> {
     let task_id = queues[priority].pop_front();
 
     if queues[priority].is_empty() {
@@ -376,7 +419,12 @@ fn dequeue_task(queues: &mut [Deque<usize, QUEUE_LEN>], priority_map: &mut u32, 
     task_id
 }
 
-fn remove_task_from_queue(queues: &mut [Deque<usize, QUEUE_LEN>], priority_map: &mut u32, task_id: usize, priority: usize) {
+fn remove_task_from_queue(
+    queues: &mut [Deque<usize, QUEUE_LEN>],
+    priority_map: &mut u32,
+    task_id: usize,
+    priority: usize,
+) {
     queues[priority].retain(|elem| *elem != task_id);
 
     if queues[priority].is_empty() {

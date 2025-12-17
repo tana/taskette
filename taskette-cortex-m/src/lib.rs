@@ -1,3 +1,8 @@
+//! Cortex-M specific code for [taskette](https://github.com/tana/taskette)
+//! 
+//! This is the Cortex-M specific part of [taskette](https://github.com/tana/taskette) multitasking framework.
+//! It currently supports Cortex-M3 and above (Armv7-M instruction set and above).
+
 #![no_std]
 
 use cortex_m::{
@@ -69,6 +74,7 @@ impl SoftwareSavedRegisters {
     }
 }
 
+/// Safely initializes the scheduler.
 pub fn init_scheduler(
     _syst: SYST,
     _scb: SCB,
@@ -143,6 +149,7 @@ fn SysTick() {
     taskette::scheduler::handle_tick();
 }
 
+/// INTERNAL USE ONLY
 #[unsafe(no_mangle)]
 pub fn _taskette_setup(clock_freq: u32, tick_freq: u32) {
     let peripherals = unsafe { cortex_m::Peripherals::steal() };
@@ -179,6 +186,7 @@ pub fn _taskette_setup(clock_freq: u32, tick_freq: u32) {
     syst.enable_interrupt();
 }
 
+/// INTERNAL USE ONLY
 #[unsafe(no_mangle)]
 pub fn _taskette_start_timer() {
     let peripherals = unsafe { cortex_m::Peripherals::steal() };
@@ -188,11 +196,13 @@ pub fn _taskette_start_timer() {
     syst.enable_counter();
 }
 
+/// INTERNAL USE ONLY
 #[unsafe(no_mangle)]
 pub fn _taskette_yield_now() {
     SCB::set_pendsv();
 }
 
+/// INTERNAL USE ONLY
 #[unsafe(no_mangle)]
 pub fn _taskette_init_stack(sp: *mut u8, pc: usize, arg: *const u8, arg_size: usize) -> *mut u8 {
     unsafe {
@@ -213,6 +223,7 @@ pub fn _taskette_init_stack(sp: *mut u8, pc: usize, arg: *const u8, arg_size: us
     }
 }
 
+/// INTERNAL USE ONLY
 #[unsafe(no_mangle)]
 pub fn _taskette_wait_for_interrupt() {
     cortex_m::asm::wfi();
@@ -235,8 +246,10 @@ unsafe fn push_to_stack(sp: *mut u8, obj: *const u8, obj_size: usize) -> *mut u8
     }
 }
 
-/// Correctly aligned stack
-/// Reference: https://docs.rs/rp2040-hal/0.11.0/rp2040_hal/multicore/struct.Stack.html
+/// Correctly aligned stack allocation helper.
+/// 
+/// It ensures allocation of a task-specific stack region correctly aligned at 8 bytes.
+/// Modeled after [rp2040-hal implementation](https://docs.rs/rp2040-hal/0.11.0/rp2040_hal/multicore/struct.Stack.html).
 #[repr(align(8))]
 pub struct Stack<const N: usize>([u8; N]);
 

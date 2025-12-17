@@ -1,3 +1,6 @@
+//! Time management, sleeping, and other timer functions.
+//!
+//! Time is represented as the number of ticks since the start of the scheduler.
 //! Implements a heap based timer, which is a variation of Scheme 3 described in the following paper:
 //!     G. Varghese and T. Lauck, “Hashed and hierarchical timing wheels: data structures for the efficient implementation of a timer facility,” in Proceedings of the eleventh ACM Symposium on Operating systems principles - SOSP ’87, Austin, Texas, United States, 1987.
 
@@ -6,7 +9,10 @@ use core::cell::RefCell;
 use critical_section::Mutex;
 use heapless::{BinaryHeap, binary_heap::Min};
 
-use crate::{Error, scheduler::{block_task, current_task_id, unblock_task}};
+use crate::{
+    Error,
+    scheduler::{block_task, current_task_id, unblock_task},
+};
 
 const MAX_TIMER_REGS: usize = 32;
 
@@ -76,10 +82,7 @@ pub(crate) fn tick() {
 
 /// Registers a one-shot timeout that wakes the specified task up on `time`.
 pub(crate) fn wait_task_until(time: u64, task_id: usize) -> Result<(), Error> {
-    let registry = TimerRegistry {
-        time,
-        task_id,
-    };
+    let registry = TimerRegistry { time, task_id };
 
     let should_block = critical_section::with(|cs| {
         let mut timer = TIMER.borrow_ref_mut(cs);
@@ -104,11 +107,12 @@ pub(crate) fn wait_task_until(time: u64, task_id: usize) -> Result<(), Error> {
     Ok(())
 }
 
-/// Sleeps the current task until the specificed time.
+/// Blocks the current task until the specificed time.
 pub fn wait_until(time: u64) -> Result<(), Error> {
     wait_task_until(time, current_task_id()?)
 }
 
+/// Retrieves current time (in ticks).
 pub fn current_time() -> Result<u64, Error> {
     critical_section::with(|cs| {
         let timer = TIMER.borrow_ref(cs);
