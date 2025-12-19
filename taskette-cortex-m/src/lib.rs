@@ -85,7 +85,60 @@ pub fn init_scheduler(
 }
 
 /// Context switching procedure
-#[cfg(target_abi = "eabi")] // No FPU
+#[cfg(all(not(target_has_atomic), target_abi = "eabi"))]  // No atomic => thumbv6m
+#[unsafe(no_mangle)]
+#[unsafe(naked)]
+extern "C" fn PendSV() {
+    // Registers {R0-R3, R12, LR, PC, xPSR} are saved in the process stack by the hardware
+    core::arch::naked_asm!(
+        "mrs r0, psp",  // Read the process stack pointer (PSP, because the SP is MSP now)
+
+        "sub r0, #4",   // For stack alignment
+
+        "mov r1, sp",   // Temporarily save SP (MSP) in R1
+        "mov sp, r0",   // Set SP (MSP) to the loaded PSP value
+
+        "push {{r4-r7}}", // Save the lower half of the remaining registers in the process stack
+        // Copy the higher half of the remaining registers into the lower half
+        "mov r4, r8",
+        "mov r5, r9",
+        "mov r6, r10",
+        "mov r7, r11",
+        "push {{r4-r7}}", // Save the copied registers values in the process stack
+
+        "mov r0, sp",   // Update R0 using the new SP value
+
+        "mov sp, r1",   // Restore the value of original SP (MSP)
+
+        "push {{lr}}",   // Save LR (that is modified by the next BL) in the main stack
+        "bl {select_task}",  // Call `select_task` function. R0 (process stack pointer) is used as the first argument and the return value.
+        "pop {{r2}}",    // Load LR (to EXC_RETURN) from the main stack into R2
+
+        "mov r1, sp",   // Temporarily save SP (MSP) in R1
+        "mov sp, r0",   // Set SP (MSP) to the returned PSP value
+
+        "pop {{r4-r7}}",  // Load the values of R8-R11 from the process stack to R4-R7
+        // Restore R8-R11 from the loaded values
+        "mov r8, r4",
+        "mov r9, r5",
+        "mov r10, r6",
+        "mov r11, r7",
+        "pop {{r4-r7}}",    // Restore R4-R7 from the process stack
+
+        "mov r0, sp",   // Update R0 with the new SP value
+
+        "add r0, #4",   // For stack alignment
+
+        "msr psp, r0",  // Set the PSP to the value of R0
+
+        "bx r2",    // Exit the exception handler by jumping to EXC_RETURN saved in R2
+        select_task = sym taskette::scheduler::select_task,
+    );
+    // Hardware restores registers R0-R3 and R12 from the new stack
+}
+
+/// Context switching procedure
+#[cfg(all(target_has_atomic, target_abi = "eabi"))] // Has atomic => thumbv7m or above, No FPU
 #[unsafe(no_mangle)]
 #[unsafe(naked)]
 extern "C" fn PendSV() {
