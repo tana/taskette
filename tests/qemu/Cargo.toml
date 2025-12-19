@@ -19,6 +19,10 @@ harness = false
 name = "futex"
 harness = false
 
+[[test]]
+name = "park_unpark"
+harness = false
+
 [dependencies]
 taskette = { path = "../../taskette" }
 taskette-cortex-m = { path = "../../taskette-cortex-m" }

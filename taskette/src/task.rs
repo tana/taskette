@@ -1,10 +1,17 @@
 //! Task manipulation functions.
+//!
+//! The API is basically modeled after `std::thread` of the Rust standard library but many functions are changed to return `Result`.
+
+use crate::{
+    Error,
+    scheduler::{block_task, current_task_id, unblock_task},
+};
 
 /// Handle object for a task.
 ///
 /// This is just a surrogate for a task ID.
 /// Dropping this has no effect on the actual task.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TaskHandle {
     pub(crate) id: usize,
 }
@@ -12,6 +19,11 @@ pub struct TaskHandle {
 impl TaskHandle {
     pub fn id(&self) -> usize {
         self.id
+    }
+
+    /// Unblocks the task if it is blocked.
+    pub fn unpark(&self) -> Result<(), Error> {
+        unblock_task(self.id)
     }
 }
 
@@ -34,4 +46,17 @@ impl Default for TaskConfig {
     fn default() -> Self {
         Self { priority: 1 }
     }
+}
+
+pub fn current() -> Result<TaskHandle, Error> {
+    Ok(TaskHandle {
+        id: current_task_id()?,
+    })
+}
+
+/// Blocks the current task indefinitely.
+///
+/// There is a possibility of spurious wakeup (i.e. being unblocked even if `TaskHandle::unpark` is not called).
+pub fn park() -> Result<(), Error> {
+    block_task(current_task_id()?)
 }
