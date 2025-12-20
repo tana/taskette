@@ -93,10 +93,10 @@ extern "C" fn PendSV() {
     core::arch::naked_asm!(
         "mrs r0, psp",  // Read the process stack pointer (PSP, because the SP is MSP now)
 
-        "sub r0, #4",   // For stack alignment
-
         "mov r1, sp",   // Temporarily save SP (MSP) in R1
         "mov sp, r0",   // Set SP (MSP) to the loaded PSP value
+
+        "sub sp, #4",   // For stack alignment
 
         "push {{r4-r7}}", // Save the lower half of the remaining registers in the process stack
         // Copy the higher half of the remaining registers into the lower half
@@ -125,9 +125,9 @@ extern "C" fn PendSV() {
         "mov r11, r7",
         "pop {{r4-r7}}",    // Restore R4-R7 from the process stack
 
-        "mov r0, sp",   // Update R0 with the new SP value
+        "add sp, #4",   // For stack alignment
 
-        "add r0, #4",   // For stack alignment
+        "mov r0, sp",   // Update R0 with the new SP value
 
         "msr psp, r0",  // Set the PSP to the value of R0
 

@@ -29,6 +29,32 @@ fn main() -> ! {
     let _task1 = spawn(move || unsafe {
         loop {
             // Continuously overwrite to some general-purpose registers
+            #[cfg(not(target_has_atomic))]  // No atomic => thumbv6m
+            core::arch::asm!(
+                "movs r0, #42",
+                "movs r1, #42",
+                "movs r2, #42",
+                "movs r3, #42",
+                "movs r4, #42",
+                "movs r5, #42",
+                "mov r8, r0",
+                "mov r9, r0",
+                "mov r10, r0",
+                "mov r11, r0",
+                "mov r12, r0",
+                out("r0") _,
+                out("r1") _,
+                out("r2") _,
+                out("r3") _,
+                out("r4") _,
+                out("r5") _,
+                out("r8") _,
+                out("r9") _,
+                out("r10") _,
+                out("r11") _,
+                out("r12") _,
+            );
+            #[cfg(target_has_atomic)]   // Has atomic => thumbv7m or above
             core::arch::asm!(
                 "mov r0, #42",
                 "mov r1, #42",
@@ -64,6 +90,61 @@ fn main() -> ! {
                 let mut values = [0u32; 13];
 
                 // Set values to registers
+                #[cfg(not(target_has_atomic))]  // No atomic => thumbv6m
+                core::arch::asm!(
+                    "movs r3, #8",
+                    "mov r8, r3",
+
+                    "movs r3, #9",
+                    "mov r9, r3",
+
+                    "movs r3, #10",
+                    "mov r10, r3",
+
+                    "movs r3, #11",
+                    "mov r11, r3",
+
+                    "movs r3, #12",
+                    "mov r12, r3",
+
+                    "movs r3, #3",
+                    "movs r4, #4",
+                    "movs r5, #5",
+                    // Force a context switch
+                    // To avoid function call, it directly cause PendSV exception by setting PENDSVSET bit of ICSR
+                    "str r1, [r0]",
+                    // Load register values
+                    "str r3, [r2, #4*3]",
+                    "str r4, [r2, #4*4]",
+                    "str r5, [r2, #4*5]",
+
+                    "mov r3, r8",
+                    "str r3, [r2, #4*8]",
+
+                    "mov r3, r9",
+                    "str r3, [r2, #4*9]",
+
+                    "mov r3, r10",
+                    "str r3, [r2, #4*10]",
+
+                    "mov r3, r11",
+                    "str r3, [r2, #4*11]",
+
+                    "mov r3, r12",
+                    "str r3, [r2, #4*12]",
+                    out("r3") _,
+                    out("r4") _,
+                    out("r5") _,
+                    out("r8") _,
+                    out("r9") _,
+                    out("r10") _,
+                    out("r11") _,
+                    out("r12") _,
+                    in("r0") 0xE000ED04u32,
+                    in("r1") (1 << 28),
+                    in("r2") values.as_mut_ptr(),
+                );
+                #[cfg(target_has_atomic)]   // Has atomic => thumbv7m or above
                 core::arch::asm!(
                     "mov r3, #3",
                     "mov r4, #4",
