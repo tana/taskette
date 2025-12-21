@@ -5,7 +5,7 @@
 use core::{cell::RefCell, mem::ManuallyDrop};
 
 use critical_section::Mutex;
-use heapless::Deque;
+use heapless::{Deque, index_map::FnvIndexMap};
 use log::{debug, info, trace};
 
 use crate::{
@@ -15,7 +15,7 @@ use crate::{
     timer,
 };
 
-pub(crate) const MAX_NUM_TASKS: usize = 10;
+pub(crate) const MAX_NUM_TASKS: usize = 16;
 pub(crate) const MAX_PRIORITY: usize = 10;
 pub(crate) const IDLE_TASK_ID: usize = 0;
 pub(crate) const IDLE_PRIORITY: usize = 0;
@@ -35,7 +35,8 @@ struct TaskInfo {
 
 #[derive(Clone, Debug)]
 struct SchedulerState {
-    tasks: [Option<TaskInfo>; MAX_NUM_TASKS],
+    tasks: FnvIndexMap<usize, TaskInfo, MAX_NUM_TASKS>,
+    last_task_id: usize,
     /// Task queues for each priority
     queues: [Deque<usize, QUEUE_LEN>; MAX_PRIORITY + 1],
     /// Bit map for finding highest priority of runnable tasks
@@ -84,13 +85,16 @@ impl Scheduler {
                 // Scheduler is already initialized
                 false
             } else {
-                let mut tasks = [const { None }; MAX_NUM_TASKS];
+                let mut tasks = FnvIndexMap::new();
                 // Reserve Task #0 for idle task
-                tasks[IDLE_TASK_ID] = Some(TaskInfo {
-                    stack_pointer: 0,
-                    priority: IDLE_PRIORITY,
-                    blocked: false,
-                });
+                tasks.insert(
+                    IDLE_TASK_ID,
+                    TaskInfo {
+                        stack_pointer: 0,
+                        priority: IDLE_PRIORITY,
+                        blocked: false,
+                    },
+                ).unwrap_or_else(|_| unreachable!());
                 // Idle task has priority 0
                 let mut queues = [const { Deque::new() }; MAX_PRIORITY + 1];
                 queues[IDLE_PRIORITY]
@@ -99,6 +103,7 @@ impl Scheduler {
 
                 *scheduler_state = Some(SchedulerState {
                     tasks,
+                    last_task_id: IDLE_TASK_ID,
                     queues,
                     priority_map: 0b1, // Indicates the idle task (priority 0) is present
                     current_task: IDLE_TASK_ID,
@@ -193,20 +198,20 @@ pub fn spawn<F: FnOnce() + Send + 'static, S: StackAllocation>(
             blocked: false,
         };
 
-        let Some((free_idx, _)) = state.tasks.iter().enumerate().find(|(_, v)| v.is_none()) else {
-            return Err(Error::TaskFull);
-        };
+        let task_id = state.last_task_id.wrapping_add(1);
+        let task_id = if task_id == IDLE_TASK_ID { task_id.wrapping_add(1) } else { task_id };
+        state.last_task_id = task_id;
 
-        state.tasks[free_idx] = Some(task);
+        state.tasks.insert(task_id, task).or(Err(Error::TaskFull))?;
 
         enqueue_task(
             &mut state.queues,
             &mut state.priority_map,
-            free_idx,
+            task_id,
             config.priority,
         )?;
 
-        Ok(free_idx)
+        Ok(task_id)
     })?;
 
     info!("Task #{} created (priority {})", task_id, config.priority);
@@ -250,7 +255,7 @@ pub unsafe extern "C" fn select_task(orig_sp: usize) -> usize {
 
         let orig_task_id = state.current_task;
         // Original task may be removed from the task list, so this is conditional
-        if let Some(ref mut orig_task) = state.tasks[orig_task_id] {
+        if let Some(orig_task) = state.tasks.get_mut(&orig_task_id) {
             if !orig_task.blocked {
                 // Enqueue the original task into the queue of the original priority
                 // (Placed afte the dequeue in order to avoid overflow)
@@ -279,7 +284,7 @@ pub unsafe extern "C" fn select_task(orig_sp: usize) -> usize {
         };
         state.current_task = next_task_id;
 
-        let Some(ref next_task) = state.tasks[next_task_id] else {
+        let Some(next_task) = state.tasks.get(&next_task_id) else {
             unreachable!()
         };
         next_task.stack_pointer
@@ -298,7 +303,7 @@ pub(crate) fn block_task(id: usize) -> Result<(), Error> {
             return Err(Error::NotInitialized);
         };
 
-        let Some(ref mut task) = state.tasks[id] else {
+        let Some(task) = state.tasks.get_mut(&id) else {
             return Err(Error::NotFound);
         };
 
@@ -328,7 +333,7 @@ pub(crate) fn unblock_task(id: usize) -> Result<(), Error> {
             return Err(Error::NotInitialized);
         };
 
-        let Some(ref mut task) = state.tasks[id] else {
+        let Some(task) = state.tasks.get_mut(&id) else {
             return Err(Error::NotFound);
         };
 
@@ -375,11 +380,10 @@ fn remove_task(id: usize) -> Result<(), Error> {
         };
 
         // Remove from the task list
-        let Some(ref task) = state.tasks[id] else {
+        let Some(task) = state.tasks.remove(&id) else {
             return Err(Error::NotFound);
         };
         let priority = task.priority;
-        state.tasks[id] = None;
 
         // Remove from the task queue
         remove_task_from_queue(&mut state.queues, &mut state.priority_map, id, priority);
