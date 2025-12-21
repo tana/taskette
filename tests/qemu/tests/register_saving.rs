@@ -144,7 +144,7 @@ fn main() -> ! {
                     in("r1") (1 << 28),
                     in("r2") values.as_mut_ptr(),
                 );
-                #[cfg(target_has_atomic)]   // Has atomic => thumbv7m or above
+                #[cfg(target_has_atomic = "ptr")]   // Has atomic => thumbv7m or above
                 core::arch::asm!(
                     "mov r3, #3",
                     "mov r4, #4",

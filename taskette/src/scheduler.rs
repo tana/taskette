@@ -242,10 +242,6 @@ pub fn handle_tick() {
 
 /// INTERNAL USE ONLY
 pub unsafe extern "C" fn select_task(orig_sp: usize) -> usize {
-    unsafe {
-        trace!("{:?}", *(orig_sp as *const [u32; 18]));
-    }
-
     let next_sp = critical_section::with(|cs| {
         let mut state = SCHEDULER_STATE.borrow_ref_mut(cs);
         let Some(state) = state.as_mut() else {

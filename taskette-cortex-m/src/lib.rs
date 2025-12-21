@@ -85,7 +85,7 @@ pub fn init_scheduler(
 }
 
 /// Context switching procedure
-#[cfg(all(not(target_has_atomic), target_abi = "eabi"))]  // No atomic => thumbv6m
+#[cfg(not(target_has_atomic = "ptr"))]  // No atomic => thumbv6m
 #[unsafe(no_mangle)]
 #[unsafe(naked)]
 extern "C" fn PendSV() {
@@ -133,6 +133,7 @@ extern "C" fn PendSV() {
         "add sp, #4",   // For stack alignment
 
         "mov r0, sp",   // Update R0 with the new SP value
+        "mov sp, r1",   // Restore the value of original SP (MSP)
 
         "msr psp, r0",  // Set the PSP to the value of R0
 
@@ -143,7 +144,7 @@ extern "C" fn PendSV() {
 }
 
 /// Context switching procedure
-#[cfg(all(target_has_atomic, target_abi = "eabi"))] // Has atomic => thumbv7m or above, No FPU
+#[cfg(all(target_has_atomic = "ptr", target_abi = "eabi"))] // Has atomic => thumbv7m or above, No FPU
 #[unsafe(no_mangle)]
 #[unsafe(naked)]
 extern "C" fn PendSV() {
