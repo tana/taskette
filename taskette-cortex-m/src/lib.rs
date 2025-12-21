@@ -96,9 +96,7 @@ extern "C" fn PendSV() {
         "mov r1, sp",   // Temporarily save SP (MSP) in R1
         "mov sp, r0",   // Set SP (MSP) to the loaded PSP value
 
-        "sub sp, #4",   // For stack alignment
-
-        "sub sp, #4*5",   // Move SP to just above R8-R11,LR
+        "sub sp, #4*(5+1)",   // Move SP to just above R8-R11,LR (plus alignment)
         "push {{r4-r7}}", // Save the lower half of the remaining registers in the process stack
         "add sp, #4*9",   // Move the stack pointer to below R8-R11,LR
         // Copy the higher half of the remaining registers into the lower half
@@ -128,9 +126,7 @@ extern "C" fn PendSV() {
         "mov lr, r6",
         "sub sp, #4*9", // Move the stack pointer to above R4-R7
         "pop {{r4-r7}}",    // Restore R4-R7 from the process stack
-        "add sp, #4*5", // Move the stack pointer to below R8-R11
-
-        "add sp, #4",   // For stack alignment
+        "add sp, #4*(5+1)", // Move the stack pointer to below R8-R11 (plus alignment)
 
         "mov r0, sp",   // Update R0 with the new SP value
         "mov sp, r1",   // Restore the value of original SP (MSP)
