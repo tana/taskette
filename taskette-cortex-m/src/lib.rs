@@ -85,7 +85,62 @@ pub fn init_scheduler(
 }
 
 /// Context switching procedure
-#[cfg(target_abi = "eabi")] // No FPU
+#[cfg(not(target_has_atomic = "ptr"))]  // No atomic => thumbv6m
+#[unsafe(no_mangle)]
+#[unsafe(naked)]
+extern "C" fn PendSV() {
+    // Registers {R0-R3, R12, LR, PC, xPSR} are saved in the process stack by the hardware
+    core::arch::naked_asm!(
+        "mrs r0, psp",  // Read the process stack pointer (PSP, because the SP is MSP now)
+
+        "mov r1, sp",   // Temporarily save SP (MSP) in R1
+        "mov sp, r0",   // Set SP (MSP) to the loaded PSP value
+
+        "sub sp, #4*(5+1)",   // Move SP to just above R8-R11,LR (plus alignment)
+        "push {{r4-r7}}", // Save the lower half of the remaining registers in the process stack
+        "add sp, #4*9",   // Move the stack pointer to below R8-R11,LR
+        // Copy the higher half of the remaining registers into the lower half
+        "mov r2, r8",
+        "mov r3, r9",
+        "mov r4, r10",
+        "mov r5, r11",
+        "push {{r2-r5,lr}}", // Save the copied registers values and LR in the process stack
+        "sub sp, #4*4",   // Move the stack pointer to above R4-R7
+
+        "mov r0, sp",   // Update R0 using the new SP value
+
+        "mov sp, r1",   // Restore the value of original SP (MSP)
+
+        "bl {select_task}",  // Call `select_task` function. R0 (process stack pointer) is used as the first argument and the return value.
+
+        "mov r1, sp",   // Temporarily save SP (MSP) in R1
+        "mov sp, r0",   // Set SP (MSP) to the returned PSP value
+
+        "add sp, #4*4", // Move the stack pointer to just above R8-R11,LR
+        "pop {{r2-r6}}",  // Load the values of R8-R11 and LR from the process stack to R2-R6
+        // Restore R8-R11 and LR from the loaded values
+        "mov r8, r2",
+        "mov r9, r3",
+        "mov r10, r4",
+        "mov r11, r5",
+        "mov lr, r6",
+        "sub sp, #4*9", // Move the stack pointer to above R4-R7
+        "pop {{r4-r7}}",    // Restore R4-R7 from the process stack
+        "add sp, #4*(5+1)", // Move the stack pointer to below R8-R11 (plus alignment)
+
+        "mov r0, sp",   // Update R0 with the new SP value
+        "mov sp, r1",   // Restore the value of original SP (MSP)
+
+        "msr psp, r0",  // Set the PSP to the value of R0
+
+        "bx lr",    // Exit the exception handler by jumping to EXC_RETURN
+        select_task = sym taskette::scheduler::select_task,
+    );
+    // Hardware restores registers R0-R3 and R12 from the new stack
+}
+
+/// Context switching procedure
+#[cfg(all(target_has_atomic = "ptr", target_abi = "eabi"))] // Has atomic => thumbv7m or above, No FPU
 #[unsafe(no_mangle)]
 #[unsafe(naked)]
 extern "C" fn PendSV() {
