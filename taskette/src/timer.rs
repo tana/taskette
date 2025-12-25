@@ -84,7 +84,7 @@ pub(crate) fn tick() {
 pub(crate) fn wait_task_until(time: u64, task_id: usize) -> Result<(), Error> {
     let registry = TimerRegistry { time, task_id };
 
-    let should_block = critical_section::with(|cs| {
+    critical_section::with(|cs| {
         let mut timer = TIMER.borrow_ref_mut(cs);
         let Some(timer) = timer.as_mut() else {
             return Err(Error::NotInitialized);
@@ -92,19 +92,15 @@ pub(crate) fn wait_task_until(time: u64, task_id: usize) -> Result<(), Error> {
 
         if registry.time <= timer.time {
             // The timer is ringing before queueing
-            return Ok(false);
+            return Ok(());
         }
 
         timer.queue.push(registry).or(Err(Error::TimerFull))?;
 
-        Ok(true)
-    })?;
-
-    if should_block {
         block_task(task_id)?;
-    }
 
-    Ok(())
+        Ok(())
+    })
 }
 
 /// Blocks the current task until the specificed time.

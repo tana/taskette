@@ -314,14 +314,14 @@ pub(crate) fn block_task(id: usize) -> Result<(), Error> {
 
         task.blocked = true;
         // Remove the task from the task queue
-        state.queues[task.priority].retain(|elem| *elem != id);
+        remove_task_from_queue(&mut state.queues, &mut state.priority_map, id, task.priority);
+
+        trace!("Task #{} became blocked", id);
+
+        yield_now();
 
         Ok(())
     })?;
-
-    trace!("Task #{} became blocked", id);
-
-    yield_now();
 
     Ok(())
 }
@@ -351,12 +351,12 @@ pub(crate) fn unblock_task(id: usize) -> Result<(), Error> {
             task.priority,
         )?;
 
+        trace!("Task #{} is unblocked", id);
+
+        yield_now();
+
         Ok(())
     })?;
-
-    trace!("Task #{} is unblocked", id);
-
-    yield_now();
 
     Ok(())
 }
