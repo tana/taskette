@@ -173,6 +173,7 @@ extern "C" fn PendSV() {
 extern "C" fn PendSV() {
     // Registers {R0-R3, R12, LR, PC, xPSR, S0-S15} are saved in the process stack by the hardware
     core::arch::naked_asm!(
+        ".fpu fpv4-sp-d16", // Omitting this leads to a compile error in release mode (opt-level>0)
         "mrs r0, psp",  // Read the process stack pointer (PSP, because the SP is MSP now)
 
         "tst lr, #0x00000010",  // Check Bit 4 (FType) of EXC_RETURN (0 indicates the hardware-saved stack frame includes FP registers)
