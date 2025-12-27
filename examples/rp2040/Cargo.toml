@@ -1,0 +1,21 @@
+[package]
+name = "taskette-examples-rp2040"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+taskette = { path = "../../taskette", features = ["defmt", "stack-canary"] }
+taskette-cortex-m = { path = "../../taskette-cortex-m" }
+taskette-utils = { path = "../../taskette-utils" }
+rp2040-hal = { version = "0.11.0", features = ["critical-section-impl", "rt"] }
+cortex-m = "0.7.7"
+panic-halt = "1.0.0"
+static_cell = "2.1.1"
+embedded-hal = "1.0.0"
+defmt-rtt = "1.1.0"
+defmt = "1.0.1"
+usb-device = { version = "0.3.2", features = ["defmt"] }
+usbd-serial = "0.2.2"
+portable-atomic = { version = "1.12.0", features = ["critical-section"] }
+cortex-m-rt = "0.7.5"
+rp2040-boot2 = "0.3.0"
