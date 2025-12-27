@@ -22,6 +22,11 @@ pub(crate) const IDLE_PRIORITY: usize = 0;
 
 const QUEUE_LEN: usize = MAX_NUM_TASKS + 1;
 
+#[cfg(feature = "stack-canary")]
+const STACK_CANARY: u32 = 0xABCD1234;
+#[cfg(feature = "stack-canary")]
+const STACK_CANARY_LEN: usize = 4;
+
 static SCHEDULER_STATE: Mutex<RefCell<Option<SchedulerState>>> = Mutex::new(RefCell::new(None));
 static SCHEDULER_CONFIG: Mutex<RefCell<Option<SchedulerConfig>>> = Mutex::new(RefCell::new(None));
 
@@ -31,6 +36,8 @@ struct TaskInfo {
     stack_pointer: usize,
     priority: usize,
     blocked: bool,
+    #[cfg(feature = "stack-canary")]
+    stack_limit: Option<usize>, // Bottom of the stack (including canary space)
 }
 
 #[derive(Clone, Debug)]
@@ -87,14 +94,18 @@ impl Scheduler {
             } else {
                 let mut tasks = FnvIndexMap::new();
                 // Reserve Task #0 for idle task
-                tasks.insert(
-                    IDLE_TASK_ID,
-                    TaskInfo {
-                        stack_pointer: 0,
-                        priority: IDLE_PRIORITY,
-                        blocked: false,
-                    },
-                ).unwrap_or_else(|_| unreachable!());
+                tasks
+                    .insert(
+                        IDLE_TASK_ID,
+                        TaskInfo {
+                            stack_pointer: 0,
+                            priority: IDLE_PRIORITY,
+                            blocked: false,
+                            #[cfg(feature = "stack-canary")]
+                            stack_limit: None,
+                        },
+                    )
+                    .unwrap_or_else(|_| unreachable!());
                 // Idle task has priority 0
                 let mut queues = [const { Deque::new() }; MAX_PRIORITY + 1];
                 queues[IDLE_PRIORITY]
@@ -173,6 +184,18 @@ pub fn spawn<F: FnOnce() + Send + 'static, S: StackAllocation>(
     // TODO: drop when task finished
     let mut stack = ManuallyDrop::new(stack);
 
+    // Fill the bottom of the stack with the canary pattern
+    #[cfg(feature = "stack-canary")]
+    unsafe {
+        let stack_bottom = core::slice::from_raw_parts_mut(
+            stack.as_mut_slice().as_mut_ptr() as *mut u32,
+            STACK_CANARY_LEN,
+        );
+        stack_bottom
+            .iter_mut()
+            .for_each(|elem| *elem = STACK_CANARY);
+    }
+
     // Prepare initial stack of the task
     let initial_sp = unsafe {
         let arg1 = Some(func);
@@ -196,10 +219,16 @@ pub fn spawn<F: FnOnce() + Send + 'static, S: StackAllocation>(
             stack_pointer: initial_sp as usize,
             priority: config.priority,
             blocked: false,
+            #[cfg(feature = "stack-canary")]
+            stack_limit: Some(stack.as_mut_slice().as_ptr() as usize),
         };
 
         let task_id = state.last_task_id.wrapping_add(1);
-        let task_id = if task_id == IDLE_TASK_ID { task_id.wrapping_add(1) } else { task_id };
+        let task_id = if task_id == IDLE_TASK_ID {
+            task_id.wrapping_add(1)
+        } else {
+            task_id
+        };
         state.last_task_id = task_id;
 
         state.tasks.insert(task_id, task).or(Err(Error::TaskFull))?;
@@ -247,6 +276,7 @@ pub fn handle_tick() {
 
 /// INTERNAL USE ONLY
 pub unsafe extern "C" fn select_task(orig_sp: usize) -> usize {
+    // Check stack overflow
     let next_sp = critical_section::with(|cs| {
         let mut state = SCHEDULER_STATE.borrow_ref_mut(cs);
         let Some(state) = state.as_mut() else {
@@ -257,6 +287,14 @@ pub unsafe extern "C" fn select_task(orig_sp: usize) -> usize {
         // Original task may be removed from the task list, so this is conditional
         if let Some(orig_task) = state.tasks.get_mut(&orig_task_id) {
             if !orig_task.blocked {
+                #[cfg(feature = "stack-canary")]
+                unsafe {
+                    if let Some(stack_limit) = orig_task.stack_limit {
+                        // Check stack overflow
+                        check_stack_canary(stack_limit as *const u32, orig_task_id);
+                    }
+                }
+
                 // Enqueue the original task into the queue of the original priority
                 // (Placed afte the dequeue in order to avoid overflow)
                 enqueue_task(
@@ -433,6 +471,16 @@ fn remove_task_from_queue(
 
     if queues[priority].is_empty() {
         *priority_map &= !(1 << priority);
+    }
+}
+
+#[cfg(feature = "stack-canary")]
+unsafe fn check_stack_canary(stack_bottom: *const u32, task_id: usize) {
+    unsafe {
+        let stack_bottom = core::slice::from_raw_parts(stack_bottom, STACK_CANARY_LEN);
+        if stack_bottom.iter().any(|elem| *elem != STACK_CANARY) {
+            panic!("Stack overflow detected in Task #{}", task_id);
+        }
     }
 }
 

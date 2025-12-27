@@ -8,3 +8,6 @@ critical-section = "1.2.0"
 heapless = "0.9.1"
 log = "0.4.28"
 portable-atomic = "1.11.1"
+
+[features]
+stack-canary = []

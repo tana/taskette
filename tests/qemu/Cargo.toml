@@ -28,8 +28,12 @@ harness = false
 name = "block_on"
 harness = false
 
+[[test]]
+name = "stack_canary"
+harness = false
+
 [dependencies]
-taskette = { path = "../../taskette" }
+taskette = { path = "../../taskette", features = ["stack-canary"] }
 taskette-cortex-m = { path = "../../taskette-cortex-m" }
 taskette-utils = { path = "../../taskette-utils" }
 cortex-m = { version = "0.7.7", features = ["critical-section-single-core"] }
