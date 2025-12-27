@@ -6,13 +6,9 @@ use core::{cell::RefCell, mem::ManuallyDrop};
 
 use critical_section::Mutex;
 use heapless::{Deque, index_map::FnvIndexMap};
-use log::{debug, info, trace};
 
 use crate::{
-    Error,
-    arch::{self, StackAllocation, yield_now},
-    task::{TaskConfig, TaskHandle},
-    timer,
+    Error, arch::{self, StackAllocation, yield_now}, debug, info, task::{TaskConfig, TaskHandle}, timer, trace
 };
 
 pub(crate) const MAX_NUM_TASKS: usize = 16;

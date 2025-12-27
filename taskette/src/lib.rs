@@ -11,6 +11,8 @@ pub mod scheduler;
 pub mod task;
 pub mod timer;
 
+mod log_wrapper;
+
 pub use portable_atomic;
 
 #[derive(Clone, Debug)]
