@@ -76,6 +76,8 @@ impl Default for SchedulerConfig {
 /// Actual state is stored in static variables. Therefore only one instance can be created.
 pub struct Scheduler {
     clock_freq: u32,
+    idle_task_stack_start: *mut u8,
+    idle_task_stack_end: *mut u8,
 }
 
 impl Scheduler {
@@ -85,6 +87,17 @@ impl Scheduler {
     /// so architecture-specific wrappers (such as `taskette_cortex_m::init_scheduler`) should be used instead.
     pub unsafe fn init(clock_freq: u32, config: SchedulerConfig) -> Option<Self> {
         critical_section::with(|cs| SCHEDULER_CONFIG.replace(cs, Some(config)));
+
+        let Some(idle_task_stack) = (unsafe { arch::_taskette_get_idle_task_stack() }) else {
+            return None;
+        };
+        let idle_task_stack_start = idle_task_stack.as_mut_ptr_range().start;
+        let idle_task_stack_end = idle_task_stack.as_mut_ptr_range().end;
+
+        #[cfg(feature = "stack-canary")]
+        unsafe {
+            fill_stack_canary(idle_task_stack_start as *mut u32);
+        }
 
         if !critical_section::with(|cs| {
             let mut scheduler_state = SCHEDULER_STATE.borrow_ref_mut(cs);
@@ -102,7 +115,7 @@ impl Scheduler {
                             priority: IDLE_PRIORITY,
                             blocked: false,
                             #[cfg(feature = "stack-canary")]
-                            stack_limit: None,
+                            stack_limit: Some(idle_task_stack_start as usize),
                         },
                     )
                     .unwrap_or_else(|_| unreachable!());
@@ -130,7 +143,11 @@ impl Scheduler {
             return None;
         }
 
-        Some(Scheduler { clock_freq })
+        Some(Scheduler {
+            clock_freq,
+            idle_task_stack_start,
+            idle_task_stack_end,
+        })
     }
 
     /// Starts the scheduler and tasks.
@@ -150,17 +167,26 @@ impl Scheduler {
             }
         });
 
-        unsafe {
-            arch::_taskette_start_timer();
-        }
-
-        info!("Kernel started");
-
-        loop {
-            trace!("Idle");
+        let idle_task_fp: fn() -> ! = || {
             unsafe {
-                arch::_taskette_wait_for_interrupt();
+                arch::_taskette_start_timer();
             }
+
+            info!("Kernel started");
+
+            loop {
+                trace!("Idle");
+                unsafe {
+                    arch::_taskette_wait_for_interrupt();
+                }
+            }
+        };
+        unsafe {
+            arch::_taskette_run_with_stack(
+                idle_task_fp as usize,
+                self.idle_task_stack_end,
+                self.idle_task_stack_start,
+            );
         }
     }
 }
@@ -187,13 +213,7 @@ pub fn spawn<F: FnOnce() + Send + 'static, S: StackAllocation>(
     // Fill the bottom of the stack with the canary pattern
     #[cfg(feature = "stack-canary")]
     unsafe {
-        let stack_bottom = core::slice::from_raw_parts_mut(
-            stack.as_mut_slice().as_mut_ptr() as *mut u32,
-            STACK_CANARY_LEN,
-        );
-        stack_bottom
-            .iter_mut()
-            .for_each(|elem| *elem = STACK_CANARY);
+        fill_stack_canary(stack.as_mut_slice().as_mut_ptr_range().start as *mut u32);
     }
 
     // Prepare initial stack of the task
@@ -352,7 +372,12 @@ pub(crate) fn block_task(id: usize) -> Result<(), Error> {
 
         task.blocked = true;
         // Remove the task from the task queue
-        remove_task_from_queue(&mut state.queues, &mut state.priority_map, id, task.priority);
+        remove_task_from_queue(
+            &mut state.queues,
+            &mut state.priority_map,
+            id,
+            task.priority,
+        );
 
         trace!("Task #{} became blocked", id);
 
@@ -481,6 +506,17 @@ unsafe fn check_stack_canary(stack_bottom: *const u32, task_id: usize) {
         if stack_bottom.iter().any(|elem| *elem != STACK_CANARY) {
             panic!("Stack overflow detected in Task #{}", task_id);
         }
+    }
+}
+
+// Fill the bottom of the stack with the canary pattern
+#[cfg(feature = "stack-canary")]
+unsafe fn fill_stack_canary(stack_bottom: *mut u32) {
+    unsafe {
+        let stack_bottom = core::slice::from_raw_parts_mut(stack_bottom, STACK_CANARY_LEN);
+        stack_bottom
+            .iter_mut()
+            .for_each(|elem| *elem = STACK_CANARY);
     }
 }
 

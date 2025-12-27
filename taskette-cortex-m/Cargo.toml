@@ -8,3 +8,4 @@ taskette = { path = "../taskette" }
 cortex-m = "0.7.7"
 cortex-m-rt = "0.7.5"
 critical-section = "1.2.0"
+static_cell = "2.1.1"

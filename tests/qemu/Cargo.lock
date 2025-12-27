@@ -294,6 +294,7 @@ dependencies = [
  "cortex-m",
  "cortex-m-rt",
  "critical-section",
+ "static_cell",
  "taskette",
 ]
 

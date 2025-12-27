@@ -1,15 +1,21 @@
 //! Cortex-M specific code for [taskette](https://github.com/tana/taskette)
-//! 
+//!
 //! This is the Cortex-M specific part of [taskette](https://github.com/tana/taskette) multitasking framework.
 //! It currently supports Cortex-M3 and above (Armv7-M instruction set and above).
 
 #![no_std]
 
-use cortex_m::{
-    peripheral::{SCB, SYST, scb::SystemHandler, syst::SystClkSource},
-    register::control::Spsel,
+use cortex_m::peripheral::{SCB, SYST, scb::SystemHandler, syst::SystClkSource};
+use static_cell::ConstStaticCell;
+use taskette::{
+    arch::StackAllocation,
+    scheduler::{Scheduler, SchedulerConfig},
 };
-use taskette::{arch::StackAllocation, scheduler::{Scheduler, SchedulerConfig}};
+
+const IDLE_TASK_STACK_SIZE: usize = 2048;
+
+static IDLE_TASK_STACK: ConstStaticCell<Stack<IDLE_TASK_STACK_SIZE>> =
+    ConstStaticCell::new(Stack::new());
 
 #[repr(C, align(8))]
 #[derive(Clone, Debug)]
@@ -85,7 +91,7 @@ pub fn init_scheduler(
 }
 
 /// Context switching procedure
-#[cfg(not(target_has_atomic = "ptr"))]  // No atomic => thumbv6m
+#[cfg(not(target_has_atomic = "ptr"))] // No atomic => thumbv6m
 #[unsafe(no_mangle)]
 #[unsafe(naked)]
 extern "C" fn PendSV() {
@@ -212,16 +218,6 @@ pub fn _taskette_setup(clock_freq: u32, tick_freq: u32) {
     let mut scb = peripherals.SCB;
     let mut syst = peripherals.SYST;
 
-    critical_section::with(|_| unsafe {
-        // Copy the value of Main (current) Stack Pointer to the the Process Stack Pointer
-        cortex_m::register::psp::write(cortex_m::register::msp::read());
-
-        // Change the stack to the Process Stack (PSP)
-        let mut control = cortex_m::register::control::read();
-        control.set_spsel(Spsel::Psp);
-        cortex_m::register::control::write(control);
-    });
-
     // On armv6m `set_priority` is not atomic
     critical_section::with(|_| unsafe {
         // Set priorities of core exceptions
@@ -281,6 +277,39 @@ pub fn _taskette_init_stack(sp: *mut u8, pc: usize, arg: *const u8, arg_size: us
 
 /// INTERNAL USE ONLY
 #[unsafe(no_mangle)]
+pub unsafe fn _taskette_run_with_stack(pc: usize, sp: *mut u8, _stack_limit: *mut u8) -> ! {
+    unsafe {
+        core::arch::asm!(
+            // Write the new SP value to the PSP
+            "msr psp, {new_sp}",
+            // Change SP from MSP to PSP by setting the SPSEL bit of CONTROL register
+            "mrs {tmp}, control",
+            "orrs {tmp}, {spsel_mask}",
+            "msr control, {tmp}",
+            "isb",
+            // Jump to the new PC
+            "blx {new_pc}",
+            new_sp = in(reg) sp,
+            new_pc = in(reg) pc,
+            spsel_mask = in(reg) 0b10,
+            tmp = out(reg) _,
+        );
+    }
+
+    unreachable!()
+}
+
+#[unsafe(no_mangle)]
+pub fn _taskette_get_idle_task_stack() -> Option<&'static mut [u8]> {
+    if let Some(stack) = IDLE_TASK_STACK.try_take() {
+        Some(&mut stack.0)
+    } else {
+        None
+    }
+}
+
+/// INTERNAL USE ONLY
+#[unsafe(no_mangle)]
 pub fn _taskette_wait_for_interrupt() {
     cortex_m::asm::wfi();
 }
@@ -303,7 +332,7 @@ unsafe fn push_to_stack(sp: *mut u8, obj: *const u8, obj_size: usize) -> *mut u8
 }
 
 /// Correctly aligned stack allocation helper.
-/// 
+///
 /// It ensures allocation of a task-specific stack region correctly aligned at 8 bytes.
 /// Modeled after [rp2040-hal implementation](https://docs.rs/rp2040-hal/0.11.0/rp2040_hal/multicore/struct.Stack.html).
 #[repr(align(8))]

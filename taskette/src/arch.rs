@@ -15,6 +15,10 @@ unsafe extern "Rust" {
         arg_size: usize,
     ) -> *mut u8;
     /// INTERNAL USE ONLY
+    pub unsafe fn _taskette_run_with_stack(pc: usize, sp: *mut u8, stack_limit: *mut u8) -> !;
+    /// INTERNAL USE ONLY
+    pub unsafe fn _taskette_get_idle_task_stack() -> Option<&'static mut [u8]>;
+    /// INTERNAL USE ONLY
     pub unsafe fn _taskette_wait_for_interrupt();
 }
 
