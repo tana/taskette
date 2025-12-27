@@ -37,7 +37,7 @@ struct TaskInfo {
     priority: usize,
     blocked: bool,
     #[cfg(feature = "stack-canary")]
-    stack_limit: Option<usize>, // Bottom of the stack (including canary space)
+    stack_limit: usize, // Bottom of the stack (including canary space)
 }
 
 #[derive(Clone, Debug)]
@@ -115,7 +115,7 @@ impl Scheduler {
                             priority: IDLE_PRIORITY,
                             blocked: false,
                             #[cfg(feature = "stack-canary")]
-                            stack_limit: Some(idle_task_stack_start as usize),
+                            stack_limit: idle_task_stack_start as usize,
                         },
                     )
                     .unwrap_or_else(|_| unreachable!());
@@ -240,7 +240,7 @@ pub fn spawn<F: FnOnce() + Send + 'static, S: StackAllocation>(
             priority: config.priority,
             blocked: false,
             #[cfg(feature = "stack-canary")]
-            stack_limit: Some(stack.as_mut_slice().as_ptr() as usize),
+            stack_limit: stack.as_mut_slice().as_ptr() as usize,
         };
 
         let task_id = state.last_task_id.wrapping_add(1);
@@ -309,10 +309,7 @@ pub unsafe extern "C" fn select_task(orig_sp: usize) -> usize {
             if !orig_task.blocked {
                 #[cfg(feature = "stack-canary")]
                 unsafe {
-                    if let Some(stack_limit) = orig_task.stack_limit {
-                        // Check stack overflow
-                        check_stack_canary(stack_limit as *const u32, orig_task_id);
-                    }
+                    check_stack_canary(orig_task.stack_limit as *const u32, orig_task_id);
                 }
 
                 // Enqueue the original task into the queue of the original priority
