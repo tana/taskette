@@ -1,3 +1,5 @@
+// This file is released in the public domain.
+
 #![no_std]
 #![no_main]
 

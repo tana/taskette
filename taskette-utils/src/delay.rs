@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 //! `embedded-hal`-compatible delay that yields CPU to other tasks instead of busy looping.
 //! The precision is limited by the tick frequency setting of the scheduler (usually order of a millisecond or more).
 use taskette::{Error, scheduler::get_config, timer::{current_time, wait_until}};
