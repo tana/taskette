@@ -2,6 +2,10 @@
 name = "taskette"
 version = "0.1.0"
 edition = "2024"
+license = "MPL-2.0"
+description = "Multitasking library for embedded Rust (architecture-independent part)"
+homepage = "https://github.com/tana/taskette"
+repository = "https://github.com/tana/taskette"
 
 [dependencies]
 critical-section = "1.2.0"

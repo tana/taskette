@@ -2,11 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Architecture-independent core functions of [taskette](https://github.com/tana/taskette)
-//!
-//! This is the architecture-independent part of [taskette](https://github.com/tana/taskette) multitasking framework.
-//! You also need to use an architecture-specific crate such as `taskette-cortex-m`, and probably the utility crate `taskette-utils`.
-
+#![doc = include_str!("../README.md")]
 #![no_std]
 
 pub mod arch;

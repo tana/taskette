@@ -2,11 +2,6 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Cortex-M specific code for [taskette](https://github.com/tana/taskette)
-//!
-//! This is the Cortex-M specific part of [taskette](https://github.com/tana/taskette) multitasking framework.
-//! It currently supports Cortex-M3 and above (Armv7-M instruction set and above).
-
 #![no_std]
 
 use cortex_m::peripheral::{SCB, SYST, scb::SystemHandler, syst::SystClkSource};

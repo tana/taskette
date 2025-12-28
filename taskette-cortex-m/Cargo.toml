@@ -2,9 +2,13 @@
 name = "taskette-cortex-m"
 version = "0.1.0"
 edition = "2024"
+license = "MPL-2.0"
+description = "Multitasking library for embedded Rust (Cortex-M specific part)"
+homepage = "https://github.com/tana/taskette"
+repository = "https://github.com/tana/taskette"
 
 [dependencies]
-taskette = { path = "../taskette" }
+taskette = { version = "0.1.0", path = "../taskette" }
 cortex-m = "0.7.7"
 cortex-m-rt = "0.7.5"
 critical-section = "1.2.0"
