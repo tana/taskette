@@ -1,0 +1,17 @@
+[workspace]
+resolver = "3"
+members = [
+    "taskette",
+    "taskette-utils",
+    "taskette-cortex-m",
+    "tests/qemu",
+    "examples/qemu",
+    "examples/rp2040",
+    "examples/rp235x",
+]
+
+[workspace.package]
+version = "0.1.0"
+license = "MPL-2.0"
+homepage = "https://github.com/tana/taskette"
+repository = "https://github.com/tana/taskette"

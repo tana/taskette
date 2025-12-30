@@ -4,6 +4,7 @@ target = "thumbv7em-none-eabihf"
 [target.'cfg(target_arch = "arm")']
 rustflags = [
     "-C", "link-arg=-Tlink.x",
+    "-C", "link-arg=-Ltests/qemu/", # Path for memory.x
 ]
 # STM32F405RGT6 (Cortex-M4)
 runner = """qemu-system-arm \

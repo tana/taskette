@@ -4,6 +4,7 @@ target = "thumbv7em-none-eabihf"
 [target.thumbv7em-none-eabihf]
 rustflags = [
     "-C", "link-arg=-Tlink.x",
+    "-C", "link-arg=-Lexamples/qemu/", # Path for memory.x
 ]
 # STM32F405RGT6 (Cortex-M4)
 runner = """qemu-system-arm \

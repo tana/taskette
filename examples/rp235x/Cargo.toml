@@ -1,5 +1,5 @@
 [package]
-name = "taskette-examples-qemu"
+name = "taskette-examples-rp235x"
 version = "0.1.0"
 edition = "2024"
 

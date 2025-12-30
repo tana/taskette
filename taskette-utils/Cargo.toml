@@ -1,11 +1,11 @@
 [package]
 name = "taskette-utils"
-version = "0.1.0"
 edition = "2024"
-license = "MPL-2.0"
 description = "Multitasking library for embedded Rust (utility crate)"
-homepage = "https://github.com/tana/taskette"
-repository = "https://github.com/tana/taskette"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 embedded-hal = "1.0.0"

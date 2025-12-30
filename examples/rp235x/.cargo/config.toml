@@ -5,6 +5,7 @@ target = "thumbv8m.main-none-eabihf"
 rustflags = [
     "-C", "link-arg=-Tlink.x",
     "-C", "link-arg=-Tdefmt.x",
+    "-C", "link-arg=-Lexamples/rp235x/", # Path for memory.x
 ]
 runner = "probe-rs run --chip RP235x"
 
