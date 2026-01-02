@@ -4,10 +4,17 @@ members = [
     "taskette",
     "taskette-utils",
     "taskette-cortex-m",
+    "taskette-esp-riscv",
     "tests/qemu",
     "examples/qemu",
+    #"examples/rp2040",
+    #"examples/rp235x",
+    #"examples/esp32c3",
+]
+exclude = [
     "examples/rp2040",
     "examples/rp235x",
+    "examples/esp32c3",
 ]
 
 [workspace.package]

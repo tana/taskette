@@ -1,0 +1,19 @@
+[package]
+name = "taskette-examples-esp32c3"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+taskette = { path = "../../taskette", features = ["defmt", "stack-canary"] }
+taskette-esp-riscv = { path = "../../taskette-esp-riscv", features = ["esp32c3"] }
+taskette-utils = { path = "../../taskette-utils" }
+static_cell = "2.1.1"
+embedded-hal = "1.0.0"
+defmt = "1.0.1"
+#portable-atomic = { version = "1.12.0", features = ["critical-section"] }
+esp-println = { version = "0.16.1", features = ["defmt-espflash", "esp32c3"] }
+esp-hal = { version = "1.0.0", features = ["esp32c3", "unstable"] }
+esp-hal-smartled = { version = "0.17.0", features = ["esp32c3"] }
+smart-leds = "0.4.0"
+esp-backtrace = { version = "0.18.1", features = ["esp32c3", "panic-handler", "println"] }
+esp-bootloader-esp-idf = { version = "0.4.0", features = ["esp32c3"] }
