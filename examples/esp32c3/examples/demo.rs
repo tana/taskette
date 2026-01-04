@@ -1,5 +1,9 @@
 // This file is released in the public domain.
 
+//! Taskette demo for ESP32C3
+//! 
+//! This program is targeted for M5Stack StampC3 boards.
+
 #![no_std]
 #![no_main]
 
@@ -25,7 +29,7 @@ use taskette_utils::delay::Delay;
 
 static BLINK_TASK_STACK: ConstStaticCell<Stack<8192>> = ConstStaticCell::new(Stack::new());
 
-const TICK_FREQ: u32 = 1000;
+const TICK_FREQ: u32 = 10;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
