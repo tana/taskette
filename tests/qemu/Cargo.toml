@@ -34,20 +34,24 @@ harness = false
 
 [dependencies]
 taskette = { path = "../../taskette", features = ["stack-canary"] }
-taskette-cortex-m = { path = "../../taskette-cortex-m" }
+taskette-cortex-m = { path = "../../taskette-cortex-m", optional = true }
+taskette-esp-riscv = { path = "../../taskette-esp-riscv", features = ["esp32c3"], optional = true }
 taskette-utils = { path = "../../taskette-utils" }
-cortex-m = { version = "0.7.7", features = ["critical-section-single-core"] }
-cortex-m-rt = "0.7.5"
-cortex-m-semihosting = "0.5.0"
-panic-semihosting = "0.6.0"
+cortex-m = { version = "0.7.7", features = ["critical-section-single-core"], optional = true }
+cortex-m-rt = { version = "0.7.5", optional = true }
+esp-hal = { version = "1.0.0", features = ["esp32c3", "unstable"], optional = true }
+esp-bootloader-esp-idf = { version = "0.4.0", features = ["esp32c3"], optional = true }
 static_cell = "2.1.1"
 heapless = "0.9.2"
 critical-section = "1.2.0"
 embassy-sync = "0.7.2"
 embassy-futures = "0.1.2"
 portable-atomic = { version = "1.12.0", optional = true }
+semihosting = { version = "0.1.21", features = ["stdio"] }
 
 [features]
-default = ["fpu"]
+default = ["fpu", "cortex-m"]
 fpu = []
 no-atomic = ["portable-atomic/critical-section"]
+cortex-m = ["dep:taskette-cortex-m", "dep:cortex-m", "dep:cortex-m-rt"]
+esp32c3 = ["dep:taskette-esp-riscv", "dep:esp-hal", "dep:esp-bootloader-esp-idf"]

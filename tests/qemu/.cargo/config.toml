@@ -13,3 +13,16 @@ runner = """qemu-system-arm \
     -semihosting-config enable=on,target=native \
     -kernel \
     """
+
+[target.'cfg(target_arch = "riscv32")']
+rustflags = [
+    "-C", "link-arg=-Tlinkall.x",
+]
+# ESP32C3
+# TODO
+runner = """qemu-system-arm \
+    -machine netduinoplus2 \
+    -nographic \
+    -semihosting-config enable=on,target=native \
+    -kernel \
+    """
