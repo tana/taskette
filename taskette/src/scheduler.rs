@@ -291,6 +291,7 @@ pub fn handle_tick() {
 
     timer::tick();
 
+    #[cfg(feature = "round-robin")]
     yield_now();
 }
 
