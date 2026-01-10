@@ -21,10 +21,6 @@ name = "futex"
 harness = false
 
 [[test]]
-name = "park_unpark"
-harness = false
-
-[[test]]
 name = "block_on"
 harness = false
 

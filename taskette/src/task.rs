@@ -2,10 +2,7 @@
 //!
 //! The API is basically modeled after `std::thread` of the Rust standard library but many functions are changed to return `Result`.
 
-use crate::{
-    Error,
-    scheduler::{block_task, current_task_id, unblock_task},
-};
+use crate::{Error, scheduler::current_task_id};
 
 /// Handle object for a task.
 ///
@@ -19,11 +16,6 @@ pub struct TaskHandle {
 impl TaskHandle {
     pub fn id(&self) -> usize {
         self.id
-    }
-
-    /// Unblocks the task if it is blocked.
-    pub fn unpark(&self) -> Result<(), Error> {
-        unblock_task(self.id)
     }
 }
 
@@ -52,11 +44,4 @@ pub fn current() -> Result<TaskHandle, Error> {
     Ok(TaskHandle {
         id: current_task_id()?,
     })
-}
-
-/// Blocks the current task indefinitely.
-///
-/// There is a possibility of spurious wakeup (i.e. being unblocked even if `TaskHandle::unpark` is not called).
-pub fn park() -> Result<(), Error> {
-    block_task(current_task_id()?)
 }
