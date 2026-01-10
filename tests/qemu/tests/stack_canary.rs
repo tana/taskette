@@ -7,20 +7,20 @@
 #![no_std]
 #![no_main]
 
+mod utils;
+
 use core::{fmt::Write, panic::PanicInfo};
 
-use cortex_m_semihosting::{
-    debug::{self, EXIT_FAILURE, EXIT_SUCCESS},
-    hprintln,
-};
 use heapless::String;
+use semihosting::{println, process::ExitCode};
 use static_cell::{ConstStaticCell, StaticCell};
 use taskette::{
     arch::yield_now,
-    scheduler::{Scheduler, SchedulerConfig, spawn},
+    scheduler::{Scheduler, spawn},
     task::TaskConfig,
 };
-use taskette_cortex_m::{Stack, init_scheduler};
+
+use crate::utils::{Stack, entry, init_scheduler};
 
 static SCHEDULER: StaticCell<Scheduler> = StaticCell::new();
 static TASK1_STACK: ConstStaticCell<Stack<8192>> = ConstStaticCell::new(Stack::new());
@@ -30,28 +30,17 @@ fn panic_handler(info: &PanicInfo<'_>) -> ! {
     let mut message = String::<128>::new();
     if write!(&mut message, "{}", info.message()).is_ok() {
         if message.starts_with("Stack overflow detected") {
-            debug::exit(EXIT_SUCCESS);
+            ExitCode::SUCCESS.exit_process();
         }
     }
 
-    hprintln!("{:?}", info);
-    debug::exit(EXIT_FAILURE);
-
-    loop {}
+    println!("{:?}", info);
+    ExitCode::FAILURE.exit_process();
 }
 
-#[cortex_m_rt::entry]
+#[entry]
 fn main() -> ! {
-    let peripherals = cortex_m::Peripherals::take().unwrap();
-    let scheduler = SCHEDULER.init(
-        init_scheduler(
-            peripherals.SYST,
-            peripherals.SCB,
-            168_000_000,
-            SchedulerConfig::default().with_tick_freq(100),
-        )
-        .unwrap(),
-    );
+    let scheduler = SCHEDULER.init(init_scheduler(100).unwrap());
 
     let _task1 = spawn(task1, TASK1_STACK.take(), TaskConfig::default()).unwrap();
 
@@ -60,7 +49,7 @@ fn main() -> ! {
 
 fn task1() {
     crash();
-    debug::exit(EXIT_FAILURE);
+    ExitCode::FAILURE.exit_process();
 }
 
 #[allow(unconditional_recursion)]

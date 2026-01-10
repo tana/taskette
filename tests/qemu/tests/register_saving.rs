@@ -10,24 +10,21 @@
 #![no_std]
 #![no_main]
 
-use cortex_m_semihosting::{debug, hprintln};
-use panic_semihosting as _;
+mod panic_handler;
+mod utils;
+
+use semihosting::{println, process::ExitCode};
 use static_cell::StaticCell;
-use taskette::{scheduler::{SchedulerConfig, spawn}, task::TaskConfig};
-use taskette_cortex_m::{Stack, init_scheduler};
+use taskette::{scheduler::spawn, task::TaskConfig};
+
+use crate::utils::{Stack, entry, init_scheduler};
 
 static TASK1_STACK: StaticCell<Stack<8192>> = StaticCell::new();
 static TASK2_STACK: StaticCell<Stack<8192>> = StaticCell::new();
 
-#[cortex_m_rt::entry]
+#[entry]
 fn main() -> ! {
-    let peripherals = cortex_m::Peripherals::take().unwrap();
-    let scheduler = init_scheduler(
-        peripherals.SYST,
-        peripherals.SCB,
-        168_000_000,
-        SchedulerConfig::default().with_tick_freq(1000),
-    ).unwrap();
+    let scheduler = init_scheduler(1000).unwrap();
 
     let task1_stack = TASK1_STACK.init(Stack::new());
     let _task1 = spawn(move || unsafe {
@@ -188,15 +185,15 @@ fn main() -> ! {
                 for i in 3..=12 {
                     if values[i] != correct[i] {
                         result = false;
-                        hprintln!("r{} = {}", i, values[i]);
+                        println!("r{} = {}", i, values[i]);
                     }
                 }
         }
 
         if result {
-            debug::exit(debug::EXIT_SUCCESS);
+            ExitCode::SUCCESS.exit_process();
         } else {
-            debug::exit(debug::EXIT_FAILURE);
+            ExitCode::FAILURE.exit_process();
         }
     }, task2_stack, TaskConfig::default()).unwrap();
 

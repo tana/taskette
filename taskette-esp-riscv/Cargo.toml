@@ -1,0 +1,20 @@
+[package]
+name = "taskette-esp-riscv"
+edition = "2024"
+description = "Multitasking library for embedded Rust (Espressif RISC-V specific part)"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+taskette = { version = "0.1.0", path = "../taskette" }
+critical-section = "1.2.0"
+static_cell = "2.1.1"
+esp-hal = { version = "1.0.0", features = ["unstable"] }
+
+[features]
+esp32c2 = ["esp-hal/esp32c2"]
+esp32c3 = ["esp-hal/esp32c3"]
+esp32c6 = ["esp-hal/esp32c6"]
+esp32h2 = ["esp-hal/esp32h2"]

@@ -7,22 +7,22 @@
 #![no_std]
 #![no_main]
 
+mod panic_handler;
+mod utils;
+
 use core::{cell::RefCell, sync::atomic::Ordering};
 
-use cortex_m_semihosting::{
-    debug::{self, EXIT_FAILURE, EXIT_SUCCESS},
-    hprint, hprintln,
-};
 use critical_section::Mutex;
 use heapless::Vec;
-use panic_semihosting as _;
+use semihosting::{print, println, process::ExitCode};
 use static_cell::StaticCell;
 use taskette::{
     futex::Futex,
-    scheduler::{Scheduler, SchedulerConfig, spawn},
+    scheduler::{Scheduler, spawn},
     task::TaskConfig,
 };
-use taskette_cortex_m::{Stack, init_scheduler};
+
+use crate::utils::{Stack, entry, init_scheduler};
 
 static SCHEDULER: StaticCell<Scheduler> = StaticCell::new();
 static TASK_LOW_STACK: StaticCell<Stack<8192>> = StaticCell::new();
@@ -32,18 +32,9 @@ static NUMBERS: Mutex<RefCell<Vec<i32, 2000>>> = Mutex::new(RefCell::new(Vec::ne
 
 static FUTEX: Futex = Futex::new(0);
 
-#[cortex_m_rt::entry]
+#[entry]
 fn main() -> ! {
-    let peripherals = cortex_m::Peripherals::take().unwrap();
-    let scheduler = SCHEDULER.init(
-        init_scheduler(
-            peripherals.SYST,
-            peripherals.SCB,
-            168_000_000,
-            SchedulerConfig::default().with_tick_freq(100),
-        )
-        .unwrap(),
-    );
+    let scheduler = SCHEDULER.init(init_scheduler(100).unwrap());
 
     // Stacks are allocated here because `StaticCell::init`` temporarily place the value on stack and may cause overflow
     let task_low_stack = TASK_LOW_STACK.init(Stack::new());
@@ -81,14 +72,14 @@ fn task_low(task_high_stack: &mut Stack<8192>) {
     critical_section::with(|cs| {
         let numbers = NUMBERS.borrow_ref(cs);
         if numbers.iter().cloned().eq(0..2000) {
-            debug::exit(EXIT_SUCCESS);
+            ExitCode::SUCCESS.exit_process();
         } else {
             // If the low priority task is not preempted correctly, the numbers will be incorrectly ordered
             for num in numbers.iter() {
-                hprint!("{} ", num);
+                print!("{} ", num);
             }
-            hprintln!("");
-            debug::exit(EXIT_FAILURE);
+            println!("");
+            ExitCode::FAILURE.exit_process();
         }
     });
 }
