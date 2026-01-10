@@ -29,4 +29,4 @@ jobs:
       run: cargo test --verbose
     - name: Run QEMU tests (thumbv6m-none-eabi)
       working-directory: tests/qemu
-      run: cargo test --verbose --target thumbv6m-none-eabi --no-default-features -F no-atomic
+      run: cargo test --verbose --target thumbv6m-none-eabi --no-default-features -F cortex-m,no-atomic
