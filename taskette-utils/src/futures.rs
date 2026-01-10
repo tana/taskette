@@ -1,11 +1,12 @@
 //! Support for asynchronous (`async`/`await`) code
 
 use core::{
-    pin::pin,
-    task::{Context, Poll, RawWaker, RawWakerVTable, Waker},
+    pin::pin, sync::atomic::Ordering, task::{Context, Poll, RawWaker, RawWakerVTable, Waker}
 };
 
-use taskette::task::{self, TaskHandle};
+use taskette::
+    futex::Futex
+;
 
 const RAW_WAKER_VTABLE: RawWakerVTable = RawWakerVTable::new(
     raw_waker_clone,
@@ -18,12 +19,12 @@ const RAW_WAKER_VTABLE: RawWakerVTable = RawWakerVTable::new(
 ///
 /// It yields CPU to other tasks while blocking and does not involve busy loop.
 pub fn block_on<F: Future>(fut: F) -> F::Output {
-    let current_task = task::current().expect("Failed to get the current task");
+    let futex = Futex::new(0);
 
-    // SAFETY: `current_task` will live during the execution of the future (i.e. within this function)
+    // SAFETY: `futex` will live during the execution of the future (i.e. within this function)
     let waker = unsafe {
         Waker::from_raw(RawWaker::new(
-            &current_task as *const TaskHandle as *const (),
+            &futex as *const Futex as *const (),
             &RAW_WAKER_VTABLE,
         ))
     };
@@ -34,8 +35,10 @@ pub fn block_on<F: Future>(fut: F) -> F::Output {
     loop {
         match fut.as_mut().poll(&mut context) {
             Poll::Ready(ret) => break ret,
-            Poll::Pending => task::park().expect("Failed to park the task"),
+            Poll::Pending => futex.wait(0).expect("Failed to wait a futex"),
         }
+
+        futex.as_ref().store(0, Ordering::SeqCst);
     }
 }
 
@@ -44,13 +47,15 @@ unsafe fn raw_waker_clone(data: *const ()) -> RawWaker {
 }
 
 unsafe fn raw_waker_wake(data: *const ()) {
-    let task_handle = unsafe { &*(data as *const TaskHandle) };
-    task_handle.unpark().expect("Failed to unpark the task");
+    let futex = unsafe { &*(data as *const Futex) };
+    futex.as_ref().store(1, Ordering::SeqCst);
+    futex.wake_all().expect("Failed to wake the waiting task");
 }
 
 unsafe fn raw_waker_wake_by_ref(data: *const ()) {
-    let task_handle = unsafe { &*(data as *const TaskHandle) };
-    task_handle.unpark().expect("Failed to unpark the task");
+    let futex = unsafe { &*(data as *const Futex) };
+    futex.as_ref().store(1, Ordering::SeqCst);
+    futex.wake_all().expect("Failed to wake the waiting task");
 }
 
 unsafe fn raw_waker_drop(_data: *const ()) {
