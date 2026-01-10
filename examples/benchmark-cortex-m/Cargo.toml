@@ -1,0 +1,25 @@
+[package]
+name = "taskette-benchmark-cortex-m"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# Disable default features to disable round-robin
+taskette = { path = "../../taskette", default-features = false, features = ["defmt", "stack-canary"] }
+taskette-cortex-m = { path = "../../taskette-cortex-m" }
+taskette-utils = { path = "../../taskette-utils" }
+rp2040-hal = { version = "0.11.0", features = ["critical-section-impl", "rt"], optional = true }
+cortex-m = "0.7.7"
+static_cell = "2.1.1"
+embedded-hal = "1.0.0"
+defmt-rtt = "1.1.0"
+defmt = "1.0.1"
+portable-atomic = { version = "1.12.0" }
+cortex-m-rt = "0.7.5"
+rp2040-boot2 = { version = "0.3.0", optional = true }
+panic-probe = { version = "1.0.0", features = ["print-defmt"] }
+rp235x-hal = { version = "0.3.0", features = ["critical-section-impl", "rt"], optional = true }
+
+[features]
+rp2040 = ["dep:rp2040-hal", "dep:rp2040-boot2", "portable-atomic/critical-section"]
+rp235x = ["dep:rp235x-hal"]

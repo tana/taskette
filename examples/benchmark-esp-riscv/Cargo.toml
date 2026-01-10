@@ -1,0 +1,29 @@
+[package]
+name = "taskette-benchmark-cortex-m"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# Disable default features to disable round-robin
+taskette = { path = "../../taskette", default-features = false, features = [
+    "defmt",
+    "stack-canary",
+] }
+taskette-esp-riscv = { path = "../../taskette-esp-riscv" }
+taskette-utils = { path = "../../taskette-utils" }
+static_cell = "2.1.1"
+embedded-hal = "1.0.0"
+defmt = "1.0.1"
+esp-hal = { version = "1.0.0", features = ["unstable"] }
+esp-bootloader-esp-idf = "0.4.0"
+esp-println = { version = "0.16.1", features = ["defmt-espflash"] }
+esp-backtrace = { version = "0.18.1", features = ["panic-handler", "println"] }
+
+[features]
+esp32c3 = [
+    "taskette-esp-riscv/esp32c3",
+    "esp-hal/esp32c3",
+    "esp-bootloader-esp-idf/esp32c3",
+    "esp-println/esp32c3",
+    "esp-backtrace/esp32c3",
+]
