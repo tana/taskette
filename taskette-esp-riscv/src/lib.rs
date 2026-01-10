@@ -1,7 +1,3 @@
-// This Source Code Form is subject to the terms of the Mozilla Public
-// License, v. 2.0. If a copy of the MPL was not distributed with this
-// file, You can obtain one at https://mozilla.org/MPL/2.0/.
-
 //! Architecture-specific part of Taskette for RISC-V-based Espressif ESP32-series chips.
 //! 
 //! ESP-specific tricks are inspired by the implementation of `esp-rtos` crate: https://github.com/esp-rs/esp-hal/blob/93d5d9af1cabc9d8f3bb2b29ae3e15613109c870/esp-rtos/src/task/riscv.rs#L296-L301

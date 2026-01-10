@@ -38,6 +38,3 @@ Taskette is composed of 3 crates:
 | `taskette` | [![Crates.io Version](https://img.shields.io/crates/v/taskette)](https://crates.io/crates/taskette) | [![docs.rs](https://img.shields.io/docsrs/taskette)](https://docs.rs/taskette/latest/taskette/) |
 | `taskette-utils` | [![Crates.io Version](https://img.shields.io/crates/v/taskette-utils)](https://crates.io/crates/taskette-utils) | [![docs.rs](https://img.shields.io/docsrs/taskette-utils)](https://docs.rs/taskette-utils/latest/taskette_utils/) |
 | `taskette-cortex-m` | [![Crates.io Version](https://img.shields.io/crates/v/taskette-cortex-m)](https://crates.io/crates/taskette-cortex-m) | [![docs.rs](https://img.shields.io/docsrs/taskette-cortex-m)](https://docs.rs/taskette-cortex-m/latest/taskette_cortex_m/) |
-
-## License
-Taskette is licensed under the Mozilla Public License v2.0. That means **you does not need to release your source code as long as you are using Taskette as a library**.
