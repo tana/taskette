@@ -20,10 +20,31 @@ esp-println = { version = "0.16.1", features = ["defmt-espflash"] }
 esp-backtrace = { version = "0.18.1", features = ["panic-handler", "println"] }
 
 [features]
+esp32c2 = [
+    "taskette-esp-riscv/esp32c2",
+    "esp-hal/esp32c2",
+    "esp-bootloader-esp-idf/esp32c2",
+    "esp-println/esp32c2",
+    "esp-backtrace/esp32c2",
+]
 esp32c3 = [
     "taskette-esp-riscv/esp32c3",
     "esp-hal/esp32c3",
     "esp-bootloader-esp-idf/esp32c3",
     "esp-println/esp32c3",
     "esp-backtrace/esp32c3",
+]
+esp32c6 = [
+    "taskette-esp-riscv/esp32c6",
+    "esp-hal/esp32c6",
+    "esp-bootloader-esp-idf/esp32c6",
+    "esp-println/esp32c6",
+    "esp-backtrace/esp32c6",
+]
+esp32h2 = [
+    "taskette-esp-riscv/esp32h2",
+    "esp-hal/esp32h2",
+    "esp-bootloader-esp-idf/esp32h2",
+    "esp-println/esp32h2",
+    "esp-backtrace/esp32h2",
 ]
