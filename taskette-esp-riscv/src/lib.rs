@@ -173,7 +173,11 @@ extern "C" fn swint_handler() {
         SoftwareInterrupt::<SWINT_IDX>::steal().reset();
 
         // Save MSTATUS (as it will be modified by `mret`)
-        MSTATUS_SAVE = riscv::register::mstatus::read().bits() as u32;
+        let mut mstatus = riscv::register::mstatus::read();
+        MSTATUS_SAVE = mstatus.bits() as u32;
+        // Prohibit interruption during context switching
+        mstatus.set_mpie(false);
+        riscv::register::mstatus::write(mstatus);
         // Save the original MEPC in MSCRATCH
         riscv::register::mscratch::write(riscv::register::mepc::read());
         // "Chaining" to actual context switching code using MEPC
