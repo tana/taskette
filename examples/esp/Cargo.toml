@@ -1,0 +1,56 @@
+[package]
+name = "taskette-examples-esp32c3"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+taskette = { path = "../../taskette", features = ["defmt", "stack-canary"] }
+taskette-esp-riscv = { path = "../../taskette-esp-riscv" }
+taskette-utils = { path = "../../taskette-utils" }
+static_cell = "2.1.1"
+embedded-hal = "1.0.0"
+defmt = "1.0.1"
+#portable-atomic = { version = "1.12.0", features = ["critical-section"] }
+esp-println = { version = "0.16.1", features = ["defmt-espflash"] }
+esp-hal = { version = "1.0.0", features = ["unstable"] }
+esp-hal-smartled = "0.17.0"
+smart-leds = "0.4.0"
+esp-backtrace = { version = "0.18.1", features = ["panic-handler", "println"] }
+esp-bootloader-esp-idf = "0.4.0"
+
+[features]
+default = ["m5stampc3"]
+# MCU models
+esp32c3 = [
+    "taskette-esp-riscv/esp32c3",
+    "esp-println/esp32c3",
+    "esp-hal/esp32c3",
+    "esp-hal-smartled/esp32c3",
+    "esp-backtrace/esp32c3",
+    "esp-bootloader-esp-idf/esp32c3",
+]
+esp32c6 = [
+    "taskette-esp-riscv/esp32c6",
+    "esp-println/esp32c6",
+    "esp-hal/esp32c6",
+    "esp-hal-smartled/esp32c6",
+    "esp-backtrace/esp32c6",
+    "esp-bootloader-esp-idf/esp32c6",
+]
+esp32h2 = [
+    "taskette-esp-riscv/esp32h2",
+    "esp-println/esp32h2",
+    "esp-hal/esp32h2",
+    "esp-hal-smartled/esp32h2",
+    "esp-backtrace/esp32h2",
+    "esp-bootloader-esp-idf/esp32h2",
+]
+# RGB LED
+rgb-gpio2 = []
+rgb-gpio8 = []
+rgb-gpio20 = []
+rgbpwr-gpio19 = []
+# Boards
+m5stampc3 = ["esp32c3", "rgb-gpio2"]
+m5nanoc6 = ["esp32c6", "rgb-gpio20", "rgbpwr-gpio19"]
+esp32h2-devkit = ["esp32h2", "rgb-gpio8"]
