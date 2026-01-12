@@ -1167,7 +1167,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "taskette-examples-esp32c3"
+name = "taskette-examples-esp"
 version = "0.1.0"
 dependencies = [
  "defmt",

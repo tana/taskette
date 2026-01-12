@@ -14,7 +14,7 @@ members = [
 exclude = [
     "examples/rp2040",
     "examples/rp235x",
-    "examples/esp32c3",
+    "examples/esp",
     "examples/benchmark-cortex-m",
     "examples/benchmark-esp-riscv",
 ]
