@@ -11,10 +11,11 @@ use crate::{
     Error, arch::{self, StackAllocation, yield_now}, debug, info, task::{TaskConfig, TaskHandle}, timer, trace
 };
 
-pub(crate) const MAX_NUM_TASKS: usize = 16;
-pub(crate) const MAX_PRIORITY: usize = 10;
+pub const MAX_NUM_TASKS: usize = 16;
+pub const MAX_PRIORITY: usize = 10;
+pub const IDLE_PRIORITY: usize = 0;
+
 pub(crate) const IDLE_TASK_ID: usize = 0;
-pub(crate) const IDLE_PRIORITY: usize = 0;
 
 const QUEUE_LEN: usize = MAX_NUM_TASKS + 1;
 

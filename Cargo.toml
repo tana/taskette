@@ -5,6 +5,7 @@ members = [
     "taskette-utils",
     "taskette-cortex-m",
     "taskette-esp-riscv",
+    "taskette-esp-radio",
     "tests/qemu",
     "examples/qemu",
     #"examples/rp2040",

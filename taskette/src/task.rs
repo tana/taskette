@@ -8,7 +8,7 @@ use crate::{Error, scheduler::current_task_id};
 ///
 /// This is just a surrogate for a task ID.
 /// Dropping this has no effect on the actual task.
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TaskHandle {
     pub(crate) id: usize,
 }

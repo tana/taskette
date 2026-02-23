@@ -1,0 +1,21 @@
+[package]
+name = "taskette-esp-radio"
+edition = "2024"
+description = "esp-radio support for Taskette"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+taskette = { version = "0.1.0", path = "../taskette" }
+taskette-utils = { version = "0.1.0", path = "../taskette-utils" }
+taskette-esp-riscv = { version = "0.1.0", path = "../taskette-esp-riscv", default-features = false }
+esp-radio-rtos-driver = "0.2.0"
+critical-section = "1.2.0"
+
+[features]
+esp32c2 = ["taskette-esp-riscv/esp32c2"]
+esp32c3 = ["taskette-esp-riscv/esp32c3"]
+esp32c6 = ["taskette-esp-riscv/esp32c6"]
+esp32h2 = ["taskette-esp-riscv/esp32h2"]
