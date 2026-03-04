@@ -20,7 +20,8 @@ static TIMER: Mutex<RefCell<Option<Timer>>> = Mutex::new(RefCell::new(None));
 
 struct TimerRegistry {
     time: u64,
-    task_id: usize,
+    func: fn(usize),
+    arg: usize,
 }
 
 impl Ord for TimerRegistry {
@@ -74,15 +75,14 @@ pub(crate) fn tick() {
             if top.time <= timer.time {
                 // Timer ringing
                 let top = unsafe { timer.queue.pop_unchecked() }; // Safe because the heap is obviously not empty.
-                let _ = unblock_task(top.task_id);
+                (top.func)(top.arg)
             }
         }
     })
 }
 
-/// Registers a one-shot timeout that wakes the specified task up on `time`.
-pub(crate) fn wait_task_until(time: u64, task_id: usize) -> Result<(), Error> {
-    let registry = TimerRegistry { time, task_id };
+pub(crate) fn register_timer(time: u64, func: fn(usize), arg: usize) -> Result<bool, Error> {
+    let registry = TimerRegistry { time, func, arg };
 
     critical_section::with(|cs| {
         let mut timer = TIMER.borrow_ref_mut(cs);
@@ -92,15 +92,27 @@ pub(crate) fn wait_task_until(time: u64, task_id: usize) -> Result<(), Error> {
 
         if registry.time <= timer.time {
             // The timer is ringing before queueing
-            return Ok(());
+            (registry.func)(registry.arg);
+            return Ok(true);
         }
 
         timer.queue.push(registry).or(Err(Error::TimerFull))?;
 
-        block_task(task_id)?;
-
-        Ok(())
+        Ok(false)
     })
+}
+
+/// Registers a one-shot timeout that wakes the specified task up on `time`.
+pub(crate) fn wait_task_until(time: u64, task_id: usize) -> Result<(), Error> {
+    let func = |arg| {
+        let _ = unblock_task(arg as usize);
+    };
+
+    if !register_timer(time, func, task_id as usize)? {
+        block_task(task_id)?
+    }
+
+    Ok(())
 }
 
 /// Blocks the current task until the specificed time.
