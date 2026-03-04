@@ -9,6 +9,7 @@ use portable_atomic::AtomicUsize;
 use crate::{
     Error,
     scheduler::{MAX_NUM_TASKS, block_task, current_task_id, unblock_task},
+    timer::register_timer,
 };
 
 /// Low-level synchronization primitive.
@@ -55,6 +56,20 @@ impl Futex {
         Ok(())
     }
 
+    pub fn wait_timeout(&self, compare_val: usize, timeout_at: u64) -> Result<(), Error> {
+        let data = (self, current_task_id()?);
+        let func = |arg: usize| {
+            // SAFETY: The value pointed by `arg` is valid because `wait_timeout` function does not return before timeout
+            let (futex, task_id) = unsafe { *(arg as *const (&Futex, usize)) };
+            let _ = futex.wake_task(task_id);
+        };
+        if !register_timer(timeout_at, func, &data as *const (&Futex, usize) as usize)? {
+            self.wait(compare_val)?;
+        }
+
+        Ok(())
+    }
+
     /// Unblocks at most `num` tasks blocked on this futex.
     pub fn wake(&self, num: usize) -> Result<(), Error> {
         critical_section::with(|cs| {
@@ -80,6 +95,26 @@ impl Futex {
     /// Unblocks all tasks blocked on this futex.
     pub fn wake_all(&self) -> Result<(), Error> {
         self.wake(MAX_NUM_TASKS)
+    }
+
+    /// Unblocks a specific task.
+    ///
+    /// Nothing happens when the specified task is actually not waiting.
+    pub(crate) fn wake_task(&self, task_id: usize) -> Result<(), Error> {
+        critical_section::with(|cs| {
+            let mut waiting_tasks = self.waiting_tasks.borrow_ref_mut(cs);
+
+            if waiting_tasks
+                .iter()
+                .any(|waiting_task_id| waiting_task_id == task_id)
+            {
+                waiting_tasks.retain(|waiting_task_id| waiting_task_id != task_id);
+
+                unblock_task(task_id)?;
+            }
+
+            Ok(())
+        })
     }
 }
 
