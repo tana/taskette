@@ -106,9 +106,9 @@ impl Futex {
 
             if waiting_tasks
                 .iter()
-                .any(|waiting_task_id| waiting_task_id == task_id)
+                .any(|&waiting_task_id| waiting_task_id == task_id)
             {
-                waiting_tasks.retain(|waiting_task_id| waiting_task_id != task_id);
+                waiting_tasks.retain(|&waiting_task_id| waiting_task_id != task_id);
 
                 unblock_task(task_id)?;
             }
