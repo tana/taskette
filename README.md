@@ -1,4 +1,9 @@
 # Taskette
+
+> [!TIP]
+> This project is moved to [Codeberg](https://codeberg.org/tana_ash/taskette).
+> This repository will no longer updated.
+
 [![CI](https://github.com/tana/taskette/actions/workflows/ci.yml/badge.svg)](https://github.com/tana/taskette/actions/workflows/ci.yml)
 [![GitHub License](https://img.shields.io/github/license/tana/taskette)](https://github.com/tana/taskette/blob/main/LICENSE)
 
