@@ -23,4 +23,6 @@ pub enum Error {
     NotInitialized,
     /// Already maximum number of timer registrations exist.
     TimerFull,
+    /// The specified time is already reached at the time of timer registration.
+    TimerPast,
 }
