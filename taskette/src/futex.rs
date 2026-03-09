@@ -63,8 +63,10 @@ impl Futex {
             let (futex, task_id) = unsafe { *(arg as *const (&Futex, usize)) };
             let _ = futex.wake_task(task_id);
         };
-        let _regstry = register_timer(timeout_at, func, &data as *const (&Futex, usize) as usize)?;
+
+        let reg = register_timer(timeout_at, func, &data as *const (&Futex, usize) as usize)?;
         self.wait(compare_val)?;
+        reg.cancel();
 
         Ok(())
     }
